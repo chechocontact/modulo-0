@@ -36,6 +36,7 @@ namespace vm
 
     struct VintageEngineParameters
     {
+        bool enabled = true;   // module on/off: off = every offset glides back to 0 (80 ms)
         float flux = 0.4f;     // 0..1: how much randomness (0 = engine off, bit-transparent)
         float rate = 0.3f;     // 0..1: speed of the variation
         float depth = 0.5f;    // 0..1: size of the excursion on every destination

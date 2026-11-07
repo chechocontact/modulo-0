@@ -70,6 +70,7 @@ namespace vm
         };
 
         VintageEngineParameters q = parameters;
+        q.enabled = p.enabled;
         q.flux = clean (p.flux, q.flux);
         q.rate = clean (p.rate, q.rate);
         q.depth = clean (p.depth, q.depth);
@@ -87,7 +88,7 @@ namespace vm
         if (numSamples <= 0)
             return;
 
-        const float amount = parameters.flux * parameters.depth;
+        const float amount = parameters.enabled ? parameters.flux * parameters.depth : 0.0f;
         const float k = 1.0f - (float) std::exp (-(double) numSamples / (engine::smoothingSeconds * sampleRate));
 
         constexpr float ranges[engine::numDestinations] = {

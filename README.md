@@ -259,10 +259,13 @@ Más el **encendido** del slot (`spcEnable`) y su **Dry/Wet** (`spcMix`). El ID 
 
 ## Módulo 5 — Vintage Engine
 
+En el host los parámetros aparecen agrupados por sección: **Master**, **Texture** (incluye Vinyl Amount), **Color**, **Movement**, **Space** y **Vintage Engine**. Los grupos solo cambian cómo se listan: los IDs y los estados guardados no cambian.
+
 No es un módulo de audio: genera variaciones lentas y suaves y las **suma como pequeños desvíos** a los parámetros que fijaron el usuario o el host, justo antes de entregarlos al DSP de cada módulo. **Nunca escribe en los parámetros del host**, así que la automatización y los presets no se tocan (`PluginProcessor` lee el valor del host, el motor le suma su desvío y el resultado se recorta al rango válido).
 
 | Control | ID | Qué hace |
 |---|---|---|
+| **Vintage Engine On** | `engEnable` | Encendido del módulo. Apagado, todos los desvíos vuelven a 0 en unos 80 ms (sin saltos) |
 | **Flux** | `engFlux` | Intensidad de la aleatoriedad. A 0 el motor está apagado y todos los parámetros pasan sin cambios |
 | **Rate** | `engRate` | Velocidad de la variación (0,02–0,5 Hz de base, exponencial) |
 | **Depth** | `engDepth` | Tamaño del desvío en cada destino |
@@ -293,7 +296,7 @@ El desvío máximo de cada destino es `Flux · Depth · alcance`:
 
 `TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
 
-`EngineTests` (148 comprobaciones): exactamente transparente con Flux o Depth a 0 (también al volver a 0), desvíos acotados y en movimiento en los tres caracteres, proporcionales a Flux y a Depth, sin saltos (paso máximo por bloque, también al cambiar Character/Rate/Flux de golpe), determinista y repetible tras `reset()`, velocidad Slow < Organic < Random y creciente con Rate, destinos independientes, estadísticas iguales de 22,05 a 192 kHz y con bloques de 1 a 8192 muestras, recorte a los rangos con parámetros en los extremos, no toca los parámetros que no son destino, valores NaN/Inf, módulos reales alimentados durante 30 s sin salirse de rango, cero asignaciones y CPU.
+`EngineTests` (153 comprobaciones): exactamente transparente con Flux o Depth a 0 o con el módulo apagado (sin salto al apagarlo) (también al volver a 0), desvíos acotados y en movimiento en los tres caracteres, proporcionales a Flux y a Depth, sin saltos (paso máximo por bloque, también al cambiar Character/Rate/Flux de golpe), determinista y repetible tras `reset()`, velocidad Slow < Organic < Random y creciente con Rate, destinos independientes, estadísticas iguales de 22,05 a 192 kHz y con bloques de 1 a 8192 muestras, recorte a los rangos con parámetros en los extremos, no toca los parámetros que no son destino, valores NaN/Inf, módulos reales alimentados durante 30 s sin salirse de rango, cero asignaciones y CPU.
 
 `SpaceTests` (124 comprobaciones): transparencia con todo apagado, tiempo del delay medido (20 ms a 1,5 s), sincronización a varios tempos y divisiones, tempo cambiante, repeticiones de feedback que decaen, ping-pong, repeticiones más oscuras, cambios de tiempo sin clicks, **RT60 medido** (integral de Schroeder) en los tres tipos, nivel y Mix de la reverb, Width, cambio de Type sin clicks, estabilidad con Decay y Feedback al máximo durante 60 s, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, sin cola vieja, cero asignaciones y CPU (unos 110x tiempo real).
 

@@ -108,6 +108,7 @@ namespace vm
 
         struct EngineHandles
         {
+            std::atomic<float>* enable = nullptr;
             std::atomic<float>* flux = nullptr;
             std::atomic<float>* rate = nullptr;
             std::atomic<float>* depth = nullptr;

@@ -70,6 +70,7 @@ namespace vm::param
     inline constexpr const char* spcWidth          = "spcWidth";          // percent (stereo opening)
 
     // --- Module 5: VINTAGE ENGINE (v1) ---
+    inline constexpr const char* engEnable         = "engEnable";         // bool
     inline constexpr const char* engFlux           = "engFlux";           // percent
     inline constexpr const char* engRate           = "engRate";           // percent
     inline constexpr const char* engDepth          = "engDepth";          // percent

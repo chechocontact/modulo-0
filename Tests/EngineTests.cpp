@@ -258,6 +258,35 @@ namespace
         f.setParameters (make (0.0f, 0.5f, 1.0f, EngineCharacter::organic));
         for (int i = 0; i < 500; ++i) f.advance (512);
         CHECK (f.getOffsets().drive == 0.0f && f.getOffsets().width == 0.0f);
+
+        // Module switch: off = exactly transparent, without a jump on the way there.
+        VintageEngine g;
+        g.prepare (48000.0);
+        auto on = make (1.0f, 0.5f, 1.0f, EngineCharacter::organic);
+        g.setParameters (on);
+        for (int i = 0; i < 500; ++i) g.advance (512);
+        CHECK (g.getOffsets().drive != 0.0f);
+
+        auto off = on;
+        off.enabled = false;
+        g.setParameters (off);
+        double largest = 0.0;
+        float previous = g.getOffsets().drive / engine::driveRange;
+        for (int i = 0; i < 500; ++i)
+        {
+            g.advance (512);
+            const float now = g.getOffsets().drive / engine::driveRange;
+            largest = std::max (largest, (double) std::abs (now - previous));
+            previous = now;
+        }
+        CHECK (largest < 0.15);
+        const auto o2 = g.getOffsets();
+        CHECK (o2.drive == 0.0f && o2.wowDepth == 0.0f && o2.width == 0.0f && o2.vinylAmount == 0.0f);
+        CHECK (! g.getParameters().enabled);
+
+        g.setParameters (on);
+        for (int i = 0; i < 500; ++i) g.advance (512);
+        CHECK (g.getOffsets().drive != 0.0f);
     }
 
     void testBoundedAndMoving()
