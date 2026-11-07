@@ -1,0 +1,87 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast check of the JUCE-free Core: GCC with AddressSanitizer + UBSan.
+  core-sanitizers:
+    name: Core tests (Linux, ASan/UBSan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: cmake -S . -B build -DVM_BUILD_PLUGIN=OFF -DVM_ENABLE_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
+
+  # The real target: VST3 for Windows x64, Debug and Release.
+  windows:
+    name: Windows x64 (${{ matrix.config }})
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+      - name: Enable long paths in Git
+        run: git config --global core.longpaths true
+
+      - uses: actions/checkout@v7
+
+      # No -G: CMake picks the newest Visual Studio installed on the runner.
+      - name: Configure (downloads JUCE 9.0.5)
+        run: cmake -S . -B build -A x64
+
+      - name: Tool versions
+        shell: pwsh
+        run: |
+          cmake --version
+          Get-Content build/CMakeCache.txt | Select-String 'CMAKE_GENERATOR:|CMAKE_CXX_COMPILER_VERSION|MSVC_VERSION' -ErrorAction SilentlyContinue
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Core tests
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure
+
+      - name: Download pluginval
+        if: matrix.config == 'Release'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+
+      - name: pluginval (strictness 10, no GUI tests)
+        if: matrix.config == 'Release'
+        shell: pwsh
+        run: |
+          $plugin = "build/VintageMaker_artefacts/Release/VST3/Vintage Maker.vst3"
+          if (-not (Test-Path $plugin)) { Write-Error "Plugin not found: $plugin"; exit 1 }
+          ./pluginval/pluginval.exe --strictness-level 10 --skip-gui-tests --timeout-ms 600000 --validate "$plugin"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v7
+        with:
+          name: VintageMaker-VST3-windows-${{ matrix.config }}
+          path: build/VintageMaker_artefacts/${{ matrix.config }}/VST3/
+          if-no-files-found: error

@@ -44,6 +44,25 @@ Opciones de CMake:
 
 Solo pruebas del Core, sin JUCE: `cmake -S . -B build-core -DVM_BUILD_PLUGIN=OFF`.
 
+## GitHub Actions (CI)
+
+`.github/workflows/build.yml` se ejecuta en cada push, en cada pull request y a mano desde la pestaña *Actions* (botón *Run workflow*). Tiene dos trabajos:
+
+| Trabajo | Runner | Qué hace |
+|---|---|---|
+| Core tests (Linux, ASan/UBSan) | `ubuntu-latest` | Compila el Core con detectores de errores de memoria y comportamiento indefinido, y ejecuta `CoreTests` |
+| Windows x64 (Debug / Release) | `windows-latest` | Descarga JUCE, compila el VST3, ejecuta `CoreTests` y, en Release, **pluginval** con strictness 10; después sube el `.vst3` |
+
+El plugin compilado se descarga desde la ejecución, en *Actions → (ejecución) → Artifacts → `VintageMaker-VST3-windows-Release`*.
+
+Subir el proyecto (el zip ya incluye el historial de Git):
+
+```bat
+cd C:\dev\VintageMaker
+git remote add origin https://github.com/<usuario>/VintageMaker.git
+git push -u origin main --tags
+```
+
 ## Arquitectura
 
 ```text
@@ -122,4 +141,4 @@ Los módulos siempre devuelven señal 100 % wet. El bypass y el dry/wet de cada 
 - [ ] Compilación MSVC en Debug y Release, sin avisos con `/W4`.
 - [ ] `ctest` en verde en Windows.
 - [ ] Carga en FL Studio 2026, audio entrante y saliente, automatización, bypass y guardado/carga de proyecto.
-- [ ] pluginval (strictness 10).
+- [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.
