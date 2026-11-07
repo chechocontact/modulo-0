@@ -1,0 +1,13 @@
+# Codifies the conventions from SHARED_DEVELOPMENT_STANDARDS §3.1 (JUCE style).
+BasedOnStyle: LLVM
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 120
+BreakBeforeBraces: Allman
+SpaceBeforeParens: NonEmptyParentheses
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+NamespaceIndentation: All
+AccessModifierOffset: -4
+PointerAlignment: Left
+SortIncludes: false
