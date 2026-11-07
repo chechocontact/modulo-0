@@ -77,6 +77,7 @@ namespace vm
         }
 
         inline constexpr double typeFadeSeconds = 0.05;
+        inline constexpr float reverbSideGainAtFullWidth = 2.0f; // Width 100 % doubles the reverb's side level
         inline constexpr float reverbHighPassHz = 150.0f; // keeps the tail from getting muddy
     }
 
@@ -94,7 +95,7 @@ namespace vm
         ReverbType type = ReverbType::hall;
 
         // STEREO OPENING (both effects)
-        float width = 0.8f;       // 0..1  delay: ping-pong amount / reverb: side level
+        float width = 0.8f;       // 0..1  delay: ping-pong amount / reverb: side level (100 % = 2x natural)
 
         bool operator== (const SpaceParameters&) const = default;
     };

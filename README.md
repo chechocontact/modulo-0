@@ -239,7 +239,7 @@ Flujo: `z = entrada + Delay · eco(entrada)` → `salida = z + Mix · reverb(z)`
 | **Mix** | `spcReverbMix` | Cantidad de reverb que se suma a la señal |
 | **Decay** | `spcDecay` | Duración de la cola (RT60); el rango depende del Type |
 | **Type** | `spcType` | **Room** (0,2–2,5 s), **Plate** (0,4–6 s), **Hall** (0,8–12 s) |
-| **Width** | `spcWidth` | Apertura estéreo: en el delay es el ping-pong (0 = mono, 100 % = los ecos rebotan entre izquierda y derecha); en la reverb escala el componente lateral (0 = mono) |
+| **Width** | `spcWidth` | Apertura estéreo: en el delay es el ping-pong (0 = mono, 100 % = los ecos rebotan entre izquierda y derecha); en la reverb escala el componente lateral (0 = mono, 50 % = imagen natural, 100 % = el doble de ancho) |
 
 Más el **encendido** del slot (`spcEnable`) y su **Dry/Wet** (`spcMix`). El ID `spcMix` es el Dry/Wet del slot; la cantidad de reverb es `spcReverbMix`.
 

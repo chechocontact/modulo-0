@@ -119,8 +119,9 @@ namespace vm
                 reverb.process (zL, zR, rL, rR);
 
                 // Stereo opening: scale the side component of the reverb.
+                // 0 = mono, 50 % = the reverb's natural image, 100 % = twice as wide.
                 const float mid = 0.5f * (rL + rR);
-                const float side = 0.5f * (rL - rR) * w;
+                const float side = 0.5f * (rL - rR) * (w * space::reverbSideGainAtFullWidth);
                 rL = mid + side;
                 rR = mid - side;
                 reverbActive = true;

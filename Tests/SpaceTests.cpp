@@ -536,6 +536,7 @@ namespace
         CHECK (sideLevel (0.0f) < 1.0e-5);
         CHECK (sideLevel (1.0f) > 0.05);
         CHECK (sideLevel (0.5f) < sideLevel (1.0f) && sideLevel (0.5f) > sideLevel (0.0f));
+        CHECK_RANGE (sideLevel (1.0f) / sideLevel (0.5f), 1.9, 2.1); // 100 % is twice the natural (50 %) image
     }
 
     void testReverbTypeSwitchClickFree()
