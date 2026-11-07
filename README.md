@@ -265,9 +265,9 @@ No es un módulo de audio: genera variaciones lentas y suaves y las **suma como 
 
 | Control | ID | Qué hace |
 |---|---|---|
-| **Vintage Engine On** | `engEnable` | Encendido del módulo. Apagado, todos los desvíos vuelven a 0 en unos 80 ms (sin saltos) |
+| **Vintage Engine On** | `engEnable` | Encendido del módulo. Apagado, todos los desvíos vuelven a 0 en unos 60 ms (sin saltos) |
 | **Flux** | `engFlux` | Intensidad de la aleatoriedad. A 0 el motor está apagado y todos los parámetros pasan sin cambios |
-| **Rate** | `engRate` | Velocidad de la variación (0,02–0,5 Hz de base, exponencial) |
+| **Rate** | `engRate` | Velocidad de la variación (0,04–1,2 Hz de base, exponencial) |
 | **Depth** | `engDepth` | Tamaño del desvío en cada destino |
 | **Character** | `engCharacter` | **Slow:** deriva muy lenta. **Organic:** tres velocidades mezcladas (×1, ×2,3, ×5,1). **Random:** más rápido e irregular (×3 y ×5,3 con intervalos variables) |
 
@@ -275,20 +275,20 @@ El desvío máximo de cada destino es `Flux · Depth · alcance`:
 
 | Destino | Alcance (a Flux = Depth = 100 %) |
 |---|---|
-| Wow Depth / Wow Rate | ±20 % / ±0,35 Hz |
-| Flutter Depth / Flutter Rate | ±15 % / ±3 Hz |
-| Vinyl Amount | ±10 % |
-| Drive (Color) | ±15 % |
-| Grain (Movement) | ±15 % |
-| Tremolo Rate (Movement) | ±2 Hz |
-| Width (Space) | ±20 % |
+| Wow Depth / Wow Rate | ±45 % / ±0,8 Hz |
+| Flutter Depth / Flutter Rate | ±40 % / ±6 Hz |
+| Vinyl Amount | ±30 % |
+| Drive (Color) | ±40 % |
+| Grain (Movement) | ±40 % |
+| Tremolo Rate (Movement) | ±5 Hz |
+| Width (Space) | ±45 % |
 
 - Cada destino tiene su propia señal independiente (correlación entre destinos medida: 0,16 como máximo).
-- Todo pasa por un suavizado de 80 ms: ni cambiar de Character ni mover Flux produce saltos.
+- Todo pasa por un suavizado de 60 ms: ni cambiar de Character ni mover Flux produce saltos.
 - Es determinista: con la misma semilla, el mismo resultado tras un `reset()`.
 - Las estadísticas (tamaño y velocidad de las variaciones) no dependen de la frecuencia de muestreo ni del tamaño de bloque.
 - Sin asignaciones de memoria. Coste despreciable (~0,005 % de un núcleo).
-- **Valores por defecto:** Flux 40 %, Rate 30 %, Depth 50 %, Character Organic. El plugin queda **vivo** de serie; para oírlo estático, Flux a 0.
+- **Valores por defecto:** Flux 60 %, Rate 50 %, Depth 70 %, Character Organic. El plugin queda **vivo** de serie; para oírlo estático, Flux a 0.
 
 ## Pruebas
 

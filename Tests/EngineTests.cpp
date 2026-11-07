@@ -279,7 +279,7 @@ namespace
             largest = std::max (largest, (double) std::abs (now - previous));
             previous = now;
         }
-        CHECK (largest < 0.15);
+        CHECK (largest < 0.2);
         const auto o2 = g.getOffsets();
         CHECK (o2.drive == 0.0f && o2.wowDepth == 0.0f && o2.width == 0.0f && o2.vinylAmount == 0.0f);
         CHECK (! g.getParameters().enabled);
@@ -324,7 +324,7 @@ namespace
             const auto r = run (make (1.0f, 1.0f, 1.0f, c), 300.0);
             const double step = maxStepPerBlock (r);
             std::printf ("  character %d: largest step per 10.7 ms block = %.4f of the range\n", (int) c, step);
-            CHECK (step < 0.06);
+            CHECK (step < 0.15);
         }
 
         // Switching Character, Rate and Flux abruptly: still no jump.
@@ -344,7 +344,7 @@ namespace
                     worst = std::max (worst, (double) std::abs (now[d] - prev[d]));
             prev = now;
         }
-        CHECK (worst < 0.06);
+        CHECK (worst < 0.15);
     }
 
     void testDeterministicAndReset()
