@@ -28,12 +28,13 @@ add_library(VintageCore STATIC
     Source/DSP/Test/TestProcessor.h
     Source/DSP/Test/TestProcessor.cpp
     Source/DSP/Texture/TextureParameters.h
-    Source/DSP/Texture/NoiseGenerator.h
     Source/Core/DelayLine.h
+    Source/Core/NoiseGenerator.h
+    Source/Core/VinylNoise.h
+    Source/Core/VinylNoise.cpp
     Source/DSP/Texture/WowFlutter.h
     Source/DSP/Texture/WowFlutter.cpp
-    Source/DSP/Texture/VinylProcessor.h
-    Source/DSP/Texture/VinylProcessor.cpp
+    Source/DSP/Texture/VinylDrop.h
     Source/DSP/Texture/DegradeProcessor.h
     Source/DSP/Texture/DegradeProcessor.cpp
     Source/DSP/Texture/TextureProcessor.h
@@ -43,8 +44,6 @@ add_library(VintageCore STATIC
     Source/DSP/Color/SaturationProcessor.cpp
     Source/DSP/Color/ToneProcessor.h
     Source/DSP/Color/ToneProcessor.cpp
-    Source/DSP/Color/FocusFilter.h
-    Source/DSP/Color/FocusFilter.cpp
     Source/DSP/Color/ChorusProcessor.h
     Source/DSP/Color/ChorusProcessor.cpp
     Source/DSP/Color/ColorProcessor.h

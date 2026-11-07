@@ -13,7 +13,7 @@ namespace vm
         s.numChannels = numChannels;
 
         wowFlutter.prepare (s);
-        vinyl.prepare (s);
+        drop.prepare (spec.sampleRate);
         degrade.prepare (s);
 
         dropExcursion = (float) (texture::dropMaxExcursionSeconds * spec.sampleRate);
@@ -25,7 +25,7 @@ namespace vm
     void TextureProcessor::reset() noexcept
     {
         wowFlutter.reset();
-        vinyl.reset();
+        drop.reset();
         degrade.reset();
     }
 
@@ -40,16 +40,10 @@ namespace vm
         TextureParameters q = parameters;
         q.wowDepth = clean (p.wowDepth, q.wowDepth, 0.0f, 1.0f);
         q.wowRate = clean (p.wowRate, q.wowRate, texture::wowRateMinHz, texture::wowRateMaxHz);
-        q.wowShape = clean (p.wowShape, q.wowShape, 0.0f, 1.0f);
         q.flutterDepth = clean (p.flutterDepth, q.flutterDepth, 0.0f, 1.0f);
         q.flutterRate = clean (p.flutterRate, q.flutterRate, texture::flutterRateMinHz, texture::flutterRateMaxHz);
-        q.flutterVariation = clean (p.flutterVariation, q.flutterVariation, 0.0f, 1.0f);
-        q.vinylAmount = clean (p.vinylAmount, q.vinylAmount, 0.0f, 1.0f);
         q.vinylDrop = clean (p.vinylDrop, q.vinylDrop, 0.0f, 1.0f);
-        q.degradeAmount = clean (p.degradeAmount, q.degradeAmount, 0.0f, 1.0f);
-        q.degradeBandwidth = clean (p.degradeBandwidth, q.degradeBandwidth, 0.0f, 1.0f);
-        q.degradeSmoothing = clean (p.degradeSmoothing, q.degradeSmoothing, 0.0f, 1.0f);
-        q.crackleType = (int) p.crackleType >= 0 && (int) p.crackleType <= 2 ? p.crackleType : q.crackleType;
+        q.degrade = clean (p.degrade, q.degrade, 0.0f, 1.0f);
 
         parameters = q;
         applyParameters();
@@ -57,10 +51,12 @@ namespace vm
 
     void TextureProcessor::applyParameters() noexcept
     {
-        wowFlutter.setParams ({ parameters.wowDepth, parameters.wowRate, parameters.wowShape,
-                                parameters.flutterDepth, parameters.flutterRate, parameters.flutterVariation });
-        vinyl.setParams (parameters.vinylAmount, parameters.crackleType, parameters.vinylDrop);
-        degrade.setParams (parameters.degradeAmount, parameters.degradeBandwidth, parameters.degradeSmoothing);
+        wowFlutter.setParams ({ parameters.wowDepth, parameters.wowRate, texture::wowShape,
+                                parameters.flutterDepth, parameters.flutterRate, texture::flutterVariation });
+        drop.setAmount (parameters.vinylDrop);
+
+        const float d = parameters.degrade;
+        degrade.setParams (d, 1.0f - 0.8f * d, 0.7f * d);
     }
 
     void TextureProcessor::process (AudioBufferView block) noexcept
@@ -70,14 +66,14 @@ namespace vm
 
         for (int i = 0; i < numSamples; ++i)
         {
-            vinyl.advance();
+            drop.advance();
             degrade.advance();
 
-            const float drop = vinyl.getDropEnvelope() * vinyl.getDropAmount();
-            wowFlutter.advance (drop * dropExcursion);
+            const float dropNow = drop.getEnvelope() * drop.getAmount();
+            wowFlutter.advance (dropNow * dropExcursion);
 
             // During a drop the signal also dips in level (up to -35 %).
-            const float dropGain = 1.0f - 0.35f * drop;
+            const float dropGain = 1.0f - 0.35f * dropNow;
 
             for (int ch = 0; ch < channels; ++ch)
             {
@@ -86,7 +82,6 @@ namespace vm
                 float y = wowFlutter.process (ch, data[i]);
                 y = degrade.process (ch, y);
                 y *= dropGain;
-                y += vinyl.next (ch);
 
                 data[i] = y;
             }

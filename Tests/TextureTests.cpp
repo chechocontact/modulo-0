@@ -15,6 +15,11 @@
 #include <vector>
 
 // ---- allocation counter (proves process() never allocates) ----------------
+// GCC mis-reports the replaced global allocators below once they are inlined.
+#if defined(__GNUC__) && ! defined(__clang__)
+ #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
+
 static std::atomic<bool> countAllocations { false };
 static std::atomic<long> allocationCount { 0 };
 
@@ -31,7 +36,16 @@ void* operator new (std::size_t size)
 
 void operator delete (void* p) noexcept { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept { std::free (p); }
-void* operator new[] (std::size_t size) { return operator new (size); }
+void* operator new[] (std::size_t size)
+{
+    if (countAllocations.load (std::memory_order_relaxed))
+        allocationCount.fetch_add (1, std::memory_order_relaxed);
+
+    if (void* p = std::malloc (size == 0 ? 1 : size))
+        return p;
+
+    throw std::bad_alloc();
+}
 void operator delete[] (void* p) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
 
@@ -130,7 +144,7 @@ namespace
     TextureParameters allOff()
     {
         TextureParameters p;
-        p.wowDepth = p.flutterDepth = p.vinylAmount = p.vinylDrop = p.degradeAmount = 0.0f;
+        p.wowDepth = p.flutterDepth = p.vinylDrop = p.degrade = 0.0f;
         return p;
     }
 
@@ -256,7 +270,6 @@ namespace
         TextureParameters p = allOff();
         p.wowDepth = 1.0f;
         p.wowRate = 1.0f;
-        p.wowShape = 0.0f;
 
         Rig rig (p);
         Buffer b (2, 5 * 48000);
@@ -282,162 +295,31 @@ namespace
         CHECK_RANGE (d1.high, 0.0455, 0.0545);
     }
 
-    void testWowShapes()
-    {
-        TextureParameters p = allOff();
-        p.wowDepth = 1.0f;
-        p.wowRate = 1.0f;
-
-        double previousHigh = -1.0;
-        for (float shape : { 0.0f, 0.5f, 1.0f })
-        {
-            p.wowShape = shape;
-            Rig rig (p);
-            Buffer b (2, 8 * 48000);
-            fillSine (b, 1000.0, 48000.0, 0.5f);
-            rig.run (b, 512);
-
-            CHECK (allFinite (b));
-            const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 8 * 48000);
-            CHECK (d.cycles > 1000);
-            CHECK_RANGE (d.high, 0.005, 0.08);   // drift is random: only bounded
-            CHECK_RANGE (d.low, -0.08, -0.005);
-
-            if (shape > 0.0f)
-                CHECK (std::abs (d.high - previousHigh) > 1.0e-4); // shapes really differ
-            previousHigh = d.high;
-        }
-    }
-
     void testFlutterPitch()
     {
         TextureParameters p = allOff();
         p.flutterDepth = 1.0f;
         p.flutterRate = 10.0f;
-        p.flutterVariation = 0.0f;
 
         Rig rig (p);
         Buffer b (2, 3 * 48000);
         fillSine (b, 1000.0, 48000.0, 0.5f);
         rig.run (b, 512);
-
-        // Expected: +-2*pi*10*0.6ms = +-3.77 %
-        const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
-        CHECK_RANGE (d.high, 0.0332, 0.0422);
-        CHECK_RANGE (d.low, -0.0422, -0.0332);
-
-        // Variation changes the pattern but stays bounded.
-        p.flutterVariation = 1.0f;
-        Rig varied (p);
-        Buffer c (2, 3 * 48000);
-        fillSine (c, 1000.0, 48000.0, 0.5f);
-        varied.run (c, 512);
-        CHECK (allFinite (c));
-        const auto v = measureDeviation (c.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
-        CHECK_RANGE (v.high, 0.015, 0.09);
-        CHECK (c.data[0] != b.data[0]);
-    }
-
-    void testVinylNoiseLevels()
-    {
-        // Silence in: only the vinyl noise comes out.
-        TextureParameters p = allOff();
-        p.vinylAmount = 1.0f;
-
-        Rig rig (p);
-        Buffer b (2, 10 * 48000);
-        rig.run (b, 512);
         CHECK (allFinite (b));
 
-        const double fullDb = toDb (rms (b.data[0], 4800, 10 * 48000));
-        std::printf ("  vinyl amount 1.0 (normal): %.1f dBFS RMS\n", fullDb);
-        CHECK_RANGE (fullDb, -56.0, -44.0);
+        // Nominal +-2*pi*10*0.6ms = +-3.77 %; the fixed 30 % randomness adds some spread.
+        const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
+        CHECK_RANGE (d.high, 0.030, 0.050);
+        CHECK_RANGE (d.low, -0.050, -0.030);
 
-        p.vinylAmount = 0.5f;
+        // Half depth, about half the deviation.
+        p.flutterDepth = 0.5f;
         Rig half (p);
-        Buffer c (2, 10 * 48000);
+        Buffer c (2, 3 * 48000);
+        fillSine (c, 1000.0, 48000.0, 0.5f);
         half.run (c, 512);
-        const double halfDb = toDb (rms (c.data[0], 4800, 10 * 48000));
-        CHECK (halfDb < fullDb - 3.0);
-
-        // Stereo noise is independent between channels.
-        double dot = 0.0, n0 = 0.0, n1 = 0.0;
-        for (int i = 4800; i < b.samples(); ++i)
-        {
-            dot += (double) b.data[0][(std::size_t) i] * b.data[1][(std::size_t) i];
-            n0 += (double) b.data[0][(std::size_t) i] * b.data[0][(std::size_t) i];
-            n1 += (double) b.data[1][(std::size_t) i] * b.data[1][(std::size_t) i];
-        }
-        CHECK (std::abs (dot / std::sqrt (n0 * n1)) < 0.1);
-
-        // The noise does not depend on the input level.
-        Rig loud (p);
-        Buffer d (2, 10 * 48000);
-        fillSine (d, 1000.0, 48000.0, 0.8f);
-        Buffer e = d;
-        loud.run (e, 512);
-        double noiseOnly = 0.0;
-        for (int i = 4800; i < 10 * 48000; ++i)
-        {
-            const double diff = (double) e.data[0][(std::size_t) i] - d.data[0][(std::size_t) i];
-            noiseOnly += diff * diff;
-        }
-        CHECK (std::abs (toDb (std::sqrt (noiseOnly / (10 * 48000 - 4800))) - halfDb) < 1.0);
-    }
-
-    // Counts crackle events in `b` as groups of samples above `threshold`.
-    struct Events { double perSecond; double peak; };
-
-    Events countEvents (const std::vector<float>& y, double sr, double threshold)
-    {
-        int count = 0;
-        long lastIndex = -1000000;
-        double peak = 0.0;
-        for (std::size_t i = 4800; i < y.size(); ++i)
-        {
-            const double a = std::abs ((double) y[i]);
-            peak = std::max (peak, a);
-            if (a > threshold)
-            {
-                if ((long) i - lastIndex > 480) // 10 ms apart = separate event
-                    ++count;
-                lastIndex = (long) i;
-            }
-        }
-        return { count / ((y.size() - 4800) / sr), peak };
-    }
-
-    void testCrackleTypes()
-    {
-        const double thresholdLinear = std::pow (10.0, -32.0 / 20.0); // above the hiss peaks (about -36 dBFS)
-        Events ev[3];
-
-        for (int t = 0; t < 3; ++t)
-        {
-            TextureParameters p = allOff();
-            p.vinylAmount = 1.0f;
-            p.crackleType = (CrackleType) t;
-            Rig rig (p);
-            Buffer b (2, 20 * 48000);
-            rig.run (b, 512);
-            CHECK (allFinite (b));
-            ev[t] = countEvents (b.data[0], 48000.0, thresholdLinear);
-            std::printf ("  crackle %d: %.1f events/s, peak %.1f dBFS\n", t, ev[t].perSecond, toDb (ev[t].peak));
-        }
-
-        CHECK (ev[0].perSecond > 0.5);           // normal is audible
-        CHECK (ev[2].peak > ev[0].peak * 1.5);   // heavy pops are louder than normal ticks
-        CHECK (ev[2].peak > ev[1].peak * 1.5);   // ... and than dusty
-        CHECK (ev[1].peak < ev[0].peak * 1.2);   // dusty is the quietest-peaked type
-
-        // Less Amount, fewer and softer events.
-        TextureParameters p = allOff();
-        p.vinylAmount = 0.25f;
-        Rig rig (p);
-        Buffer b (2, 20 * 48000);
-        rig.run (b, 512);
-        const auto quiet = countEvents (b.data[0], 48000.0, thresholdLinear);
-        CHECK (quiet.perSecond < ev[0].perSecond);
+        const auto h = measureDeviation (c.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
+        CHECK_RANGE (h.high, 0.015, 0.026);
     }
 
     void testVinylDrop()
@@ -474,51 +356,41 @@ namespace
         CHECK (c.data == ref.data);
     }
 
-    void testDegradeBandwidth()
+    void testDegradeKnob()
     {
         TextureParameters p = allOff();
-        p.degradeAmount = 1.0f;
-        p.degradeSmoothing = 0.0f;
 
-        p.degradeBandwidth = 0.0f; // narrow: 500 Hz .. 1.2 kHz
-        const double narrow1k = gainAt (p, 1000.0);
-        const double narrow10k = gainAt (p, 10000.0);
-        const double narrow100 = gainAt (p, 100.0);
-        std::printf ("  narrow: 100 Hz %.1f dB, 1 kHz %.1f dB, 10 kHz %.1f dB\n",
-                     toDb (narrow100), toDb (narrow1k), toDb (narrow10k));
-        CHECK (toDb (narrow10k) < -30.0);
-        CHECK (toDb (narrow100) < -20.0);
-        CHECK (narrow1k > 0.4);
-
-        p.degradeBandwidth = 1.0f; // wide: 40 Hz .. 12 kHz
-        const double wide10k = gainAt (p, 10000.0);
-        const double wide1k = gainAt (p, 1000.0);
-        const double wide100 = gainAt (p, 100.0);
-        CHECK (toDb (wide10k) > -4.5);
-        CHECK (std::abs (toDb (wide1k)) < 1.0);
-        CHECK (toDb (wide100) > -1.0);
-        CHECK (wide10k > narrow10k * 20.0);
-
-        // Amount 0 is a true bypass at any bandwidth.
-        p.degradeAmount = 0.0f;
-        p.degradeBandwidth = 0.0f;
+        // Amount 0 is a true bypass.
         CHECK (std::abs (gainAt (p, 10000.0) - 1.0) < 1.0e-6);
 
-        // Half Amount sits between clean and fully degraded.
-        p.degradeAmount = 0.5f;
-        const double halfWay = gainAt (p, 10000.0);
-        CHECK (halfWay > narrow10k && halfWay < 0.9);
+        // Amount 1: band narrows to ~300 Hz .. 1.9 kHz.
+        p.degrade = 1.0f;
+        const double low = gainAt (p, 100.0), mid = gainAt (p, 800.0), high = gainAt (p, 10000.0);
+        std::printf ("  degrade 1.0: 100 Hz %.1f dB, 800 Hz %.1f dB, 10 kHz %.1f dB\n",
+                     toDb (low), toDb (mid), toDb (high));
+        CHECK (toDb (high) < -25.0);
+        CHECK (toDb (low) < -12.0);
+        CHECK (toDb (mid) > -6.0);
+
+        // More knob = more degraded, monotonically (checked on the highs).
+        double previous = 2.0;
+        for (float d : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+        {
+            p.degrade = d;
+            const double g = gainAt (p, 8000.0);
+            CHECK (g < previous + 1.0e-6);
+            previous = g;
+        }
     }
 
     void testDegradeSmoothing()
     {
-        // Sparse clicks over a quiet bed: smoothing must flatten the peaks.
-        auto clickPeak = [] (float smoothing)
+        // Sparse clicks over a quiet bed: the knob must flatten the peaks
+        // (partly by band-limiting, partly by transient softening).
+        auto clickPeak = [] (float degrade)
         {
             TextureParameters p = allOff();
-            p.degradeAmount = 1.0f;
-            p.degradeBandwidth = 1.0f;
-            p.degradeSmoothing = smoothing;
+            p.degrade = degrade;
 
             Rig rig (p);
             Buffer b (2, 48000);
@@ -533,28 +405,23 @@ namespace
             return (double) peak;
         };
 
-        const double plain = clickPeak (0.0f);
-        const double smoothed = clickPeak (1.0f);
-        std::printf ("  click peak: smoothing 0 = %.3f, smoothing 1 = %.3f\n", plain, smoothed);
-        CHECK (smoothed < plain * 0.7);
+        const double clean = clickPeak (0.0f), half = clickPeak (0.5f), full = clickPeak (1.0f);
+        std::printf ("  click peak: degrade 0 = %.3f, 0.5 = %.3f, 1 = %.3f\n", clean, half, full);
+        CHECK (half < clean);
+        CHECK (full < half);
+        CHECK (full < clean * 0.5);
 
-        // Steady tones are barely touched.
+        // Steady tones in the passband keep most of their level.
         TextureParameters p = allOff();
-        p.degradeAmount = 1.0f;
-        p.degradeBandwidth = 1.0f;
-        p.degradeSmoothing = 0.0f;
-        const double without = gainAt (p, 440.0);
-        p.degradeSmoothing = 1.0f;
-        const double with = gainAt (p, 440.0);
-        CHECK (with > without * 0.85);
+        p.degrade = 1.0f;
+        CHECK (gainAt (p, 800.0) > 0.5);
     }
 
     void testBlockSizeIndependence()
     {
         TextureParameters p;
-        p.wowDepth = 0.8f; p.wowShape = 0.7f; p.flutterDepth = 0.7f; p.flutterVariation = 0.8f;
-        p.vinylAmount = 0.6f; p.crackleType = CrackleType::heavy; p.vinylDrop = 0.8f;
-        p.degradeAmount = 0.7f; p.degradeBandwidth = 0.4f; p.degradeSmoothing = 0.6f;
+        p.wowDepth = 0.8f; p.wowRate = 1.3f; p.flutterDepth = 0.7f; p.flutterRate = 9.0f;
+        p.vinylDrop = 0.8f; p.degrade = 0.7f;
 
         Buffer in (2, 30000);
         fillNoise (in, 21, 0.5f);
@@ -580,9 +447,7 @@ namespace
         TextureParameters p = allOff();
         p.wowDepth = 1.0f;
         p.wowRate = 1.0f;
-        p.flutterDepth = 0.0f;
-        p.vinylAmount = 0.5f;
-        p.degradeAmount = 0.5f;
+        p.degrade = 0.5f;
 
         for (double sr : { 22050.0, 44100.0, 48000.0, 88200.0, 96000.0, 192000.0 })
         {
@@ -612,16 +477,10 @@ namespace
             TextureParameters p;
             p.wowDepth = -1.0f + 3.0f * u (rng);          // out of range on purpose
             p.wowRate = -5.0f + 20.0f * u (rng);
-            p.wowShape = u (rng);
             p.flutterDepth = -1.0f + 3.0f * u (rng);
             p.flutterRate = u (rng) * 40.0f;
-            p.flutterVariation = u (rng);
-            p.vinylAmount = u (rng);
-            p.crackleType = (CrackleType) (int) (u (rng) * 2.99f);
             p.vinylDrop = u (rng);
-            p.degradeAmount = u (rng) < 0.3f ? 0.0f : u (rng);
-            p.degradeBandwidth = u (rng);
-            p.degradeSmoothing = u (rng);
+            p.degrade = u (rng) < 0.3f ? 0.0f : u (rng);
             rig.processor.setParameters (p);
             rig.processor.process (b.view().getSubBlock (start, std::min (64, b.samples() - start)));
         }
@@ -635,22 +494,19 @@ namespace
         TextureParameters bad;
         bad.wowDepth = std::numeric_limits<float>::quiet_NaN();
         bad.flutterRate = std::numeric_limits<float>::infinity();
-        bad.degradeAmount = -std::numeric_limits<float>::infinity();
-        bad.crackleType = (CrackleType) 77;
+        bad.degrade = -std::numeric_limits<float>::infinity();
         Rig nanRig (TextureParameters {});
         nanRig.processor.setParameters (bad);
         Buffer c (2, 8192);
         fillSine (c, 500.0, 48000.0, 0.5f);
         nanRig.run (c, 256);
         CHECK (allFinite (c));
-        const auto q = nanRig.processor.getParameters();
-        CHECK (std::isfinite (q.wowDepth) && q.crackleType == CrackleType::normal);
+        CHECK (std::isfinite (nanRig.processor.getParameters().wowDepth));
     }
 
     void testMonoAndEdgeCases()
     {
         TextureParameters p;
-        p.vinylAmount = 0.5f;
         p.vinylDrop = 1.0f;
 
         Rig mono (p, 48000.0, 1);
@@ -687,9 +543,7 @@ namespace
     void testResetIsRepeatable()
     {
         TextureParameters p;
-        p.wowShape = 1.0f; p.flutterVariation = 1.0f;
-        p.vinylAmount = 1.0f; p.crackleType = CrackleType::dusty; p.vinylDrop = 1.0f;
-        p.degradeAmount = 1.0f;
+        p.vinylDrop = 1.0f; p.degrade = 1.0f;
 
         Rig rig (p);
         Buffer in (2, 24000);
@@ -708,7 +562,7 @@ namespace
     void testNoAllocationInProcess()
     {
         TextureParameters p;
-        p.vinylAmount = 0.7f; p.vinylDrop = 1.0f; p.degradeAmount = 0.8f;
+        p.vinylDrop = 1.0f; p.degrade = 0.8f;
         Rig rig (p);
         rig.processor.triggerDrop (0.2);
 
@@ -724,9 +578,8 @@ namespace
         for (int start = 0; start + 1000 <= b.samples(); start += 1000)
         {
             TextureParameters q;
-            q.wowDepth = u (rng); q.flutterDepth = u (rng); q.vinylAmount = u (rng);
-            q.crackleType = (CrackleType) (int) (u (rng) * 2.99f);
-            q.degradeAmount = u (rng); q.degradeBandwidth = u (rng);
+            q.wowDepth = u (rng); q.flutterDepth = u (rng); q.vinylDrop = u (rng);
+            q.degrade = u (rng);
             rig.processor.setParameters (q);
             rig.processor.process (b.view().getSubBlock (start, 1000));
         }
@@ -739,8 +592,7 @@ namespace
     void testPerformance()
     {
         TextureParameters p;
-        p.wowDepth = 0.6f; p.flutterDepth = 0.5f; p.vinylAmount = 0.5f; p.vinylDrop = 0.5f;
-        p.degradeAmount = 0.7f; p.degradeSmoothing = 0.5f;
+        p.wowDepth = 0.6f; p.flutterDepth = 0.5f; p.vinylDrop = 0.5f; p.degrade = 0.7f;
 
         Rig rig (p, 48000.0, 2, 512);
         Buffer b (2, 512);
@@ -773,13 +625,10 @@ int main()
         { "Off = bit-transparent (mono+stereo)", testBitTransparentWhenOff },
         { "Off + silence = silence",            testSilenceStaysSilentWhenOff },
         { "Wow: measured pitch deviation",      testWowPitch },
-        { "Wow: shapes",                        testWowShapes },
         { "Flutter: measured pitch deviation",  testFlutterPitch },
-        { "Vinyl: noise level, stereo, independent of input", testVinylNoiseLevels },
-        { "Vinyl: crackle types",               testCrackleTypes },
         { "Vinyl: drop",                        testVinylDrop },
-        { "Degrade: bandwidth",                 testDegradeBandwidth },
-        { "Degrade: transient smoothing",       testDegradeSmoothing },
+        { "Degrade: one-knob band-limiting",        testDegradeKnob },
+        { "Degrade: softened peaks",                testDegradeSmoothing },
         { "Block size independence (bit-exact)", testBlockSizeIndependence },
         { "Sample rates 22.05k-192k",           testSampleRates },
         { "Extremes, automation, NaN/Inf",      testExtremesAndAutomation },

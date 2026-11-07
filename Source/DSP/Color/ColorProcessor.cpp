@@ -14,7 +14,6 @@ namespace vm
 
         saturation.prepare (s);
         tone.prepare (s);
-        focus.prepare (s);
         chorus.prepare (s);
 
         applyParameters();
@@ -25,7 +24,6 @@ namespace vm
     {
         saturation.reset();
         tone.reset();
-        focus.reset();
         chorus.reset();
     }
 
@@ -40,16 +38,8 @@ namespace vm
         ColorParameters q = parameters;
         q.drive = clean (p.drive, q.drive, 0.0f, 1.0f);
         q.tone = clean (p.tone, q.tone, -1.0f, 1.0f);
-        q.focusLow = clean (p.focusLow, q.focusLow, color::focusLowMinHz, color::focusLowMaxHz);
-        q.focusHigh = clean (p.focusHigh, q.focusHigh, color::focusHighMinHz, color::focusHighMaxHz);
-        q.focusAmount = clean (p.focusAmount, q.focusAmount, 0.0f, 1.0f);
-        q.chorusAmount = clean (p.chorusAmount, q.chorusAmount, 0.0f, 1.0f);
-        q.chorusRate = clean (p.chorusRate, q.chorusRate, color::chorusRateMinHz, color::chorusRateMaxHz);
-        q.chorusDepth = clean (p.chorusDepth, q.chorusDepth, 0.0f, 1.0f);
-        q.chorusWidth = clean (p.chorusWidth, q.chorusWidth, 0.0f, 1.0f);
-        q.chorusMix = clean (p.chorusMix, q.chorusMix, 0.0f, 1.0f);
+        q.magicChorus = clean (p.magicChorus, q.magicChorus, 0.0f, 1.0f);
         q.type = (int) p.type >= 0 && (int) p.type <= 2 ? p.type : q.type;
-        q.chorusMode = (int) p.chorusMode >= 0 && (int) p.chorusMode <= 2 ? p.chorusMode : q.chorusMode;
 
         parameters = q;
         applyParameters();
@@ -59,9 +49,8 @@ namespace vm
     {
         saturation.setParams (parameters.drive, parameters.type);
         tone.setTone (parameters.tone);
-        focus.setParams (parameters.focusLow, parameters.focusHigh, parameters.focusAmount);
-        chorus.setParams ({ parameters.chorusAmount, parameters.chorusRate, parameters.chorusDepth,
-                            parameters.chorusWidth, parameters.chorusMix, parameters.chorusMode });
+        chorus.setParams ({ parameters.magicChorus, color::magicChorusRateHz, color::magicChorusDepth,
+                            color::magicChorusWidth, color::magicChorusMix, color::magicChorusMode });
     }
 
     void ColorProcessor::process (AudioBufferView block) noexcept
@@ -73,7 +62,6 @@ namespace vm
         {
             saturation.advance();
             tone.advance();
-            focus.advance();
             chorus.advance();
 
             for (int ch = 0; ch < channels; ++ch)
@@ -82,7 +70,6 @@ namespace vm
 
                 float y = saturation.process (ch, data[i]);
                 y = tone.process (ch, y);
-                y = focus.process (ch, y);
                 y = chorus.process (ch, y);
 
                 data[i] = y;

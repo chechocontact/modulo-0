@@ -48,6 +48,7 @@ namespace vm
         std::atomic<float>* outputGain = nullptr;
         std::atomic<float>* masterMix = nullptr;
         std::atomic<float>* masterBypass = nullptr;
+        std::atomic<float>* vinylAmount = nullptr;
         juce::AudioProcessorParameter* bypassParameter = nullptr;
 
         struct TextureHandles
@@ -56,16 +57,10 @@ namespace vm
             std::atomic<float>* mix = nullptr;
             std::atomic<float>* wowDepth = nullptr;
             std::atomic<float>* wowRate = nullptr;
-            std::atomic<float>* wowShape = nullptr;
             std::atomic<float>* flutterDepth = nullptr;
             std::atomic<float>* flutterRate = nullptr;
-            std::atomic<float>* flutterVariation = nullptr;
-            std::atomic<float>* vinylAmount = nullptr;
-            std::atomic<float>* crackleType = nullptr;
             std::atomic<float>* vinylDrop = nullptr;
-            std::atomic<float>* degradeAmount = nullptr;
-            std::atomic<float>* degradeBandwidth = nullptr;
-            std::atomic<float>* degradeSmoothing = nullptr;
+            std::atomic<float>* degrade = nullptr;
         } tex;
 
         struct ColorHandles
@@ -75,15 +70,7 @@ namespace vm
             std::atomic<float>* drive = nullptr;
             std::atomic<float>* type = nullptr;
             std::atomic<float>* tone = nullptr;
-            std::atomic<float>* focusLow = nullptr;
-            std::atomic<float>* focusHigh = nullptr;
-            std::atomic<float>* focusAmount = nullptr;
-            std::atomic<float>* chorusAmount = nullptr;
-            std::atomic<float>* chorusRate = nullptr;
-            std::atomic<float>* chorusDepth = nullptr;
-            std::atomic<float>* chorusWidth = nullptr;
-            std::atomic<float>* chorusMix = nullptr;
-            std::atomic<float>* chorusMode = nullptr;
+            std::atomic<float>* magicChorus = nullptr;
         } col;
     };
 }

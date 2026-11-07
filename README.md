@@ -79,19 +79,17 @@ Source/
 │   └── MasterProcessor.*    Master Dry/Wet, Output Gain, Bypass, troceo de bloques
 ├── DSP/
 │   ├── Test/TestProcessor.* procesador transparente (slots aún sin módulo real)
-│   └── Texture/             Módulo 1
-│       ├── TextureProcessor.*   orquesta los componentes (siempre 100 % wet)
-│       ├── TextureParameters.h  parámetros, rangos y valores por defecto
-│       ├── WowFlutter.*         modulación de tono con línea de retardo
-│       ├── NoiseGenerator.h     ruido blanco/rosa determinista
-│       ├── VinylProcessor.*     hiss, crackle y "drop"
-│       └── DegradeProcessor.*   transitorios, saturación y ancho de banda
+│   ├── Texture/             Módulo 1
+│   │   ├── TextureProcessor.*   orquesta los componentes (siempre 100 % wet)
+│   │   ├── TextureParameters.h  parámetros, rangos y valores por defecto
+│   │   ├── WowFlutter.*         modulación de tono con línea de retardo
+│   │   ├── VinylDrop.h          el "drop" del vinilo (bajada de tono y nivel)
+│   │   └── DegradeProcessor.*   transitorios, saturación y ancho de banda
 │   └── Color/               Módulo 2
-│       ├── ColorProcessor.*     Saturación → Tone → Focus → Chorus (siempre 100 % wet)
+│       ├── ColorProcessor.*     Saturación → Tone → Magic Chorus (siempre 100 % wet)
 │       ├── ColorParameters.h    parámetros, rangos y valores por defecto
 │       ├── SaturationProcessor.* Tube / Tape / Console con ADAA
 │       ├── ToneProcessor.*      inclinación tonal bipolar
-│       ├── FocusFilter.*        pasa-altos + pasa-bajos mezclables
 │       └── ChorusProcessor.*    Classic / Dimension / Ensemble
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
@@ -143,79 +141,56 @@ Los módulos siempre devuelven señal 100 % wet. El bypass y el dry/wet de cada 
 
 ## Módulo 1 — Texture
 
-Flujo: `entrada → Wow + Flutter → Degrade → caída de nivel del Drop → + ruido de vinilo`.
+Flujo: `entrada → Wow + Flutter → Degrade → caída de nivel del Drop`.
 
-| Sección | Controles | Cómo funciona |
+El **ruido de vinilo** (hiss + crackle) **no está en la cadena**: lo genera el `MasterProcessor` y se suma al final, después de Output Gain, Master Dry/Wet y Bypass, así que ningún otro módulo lo altera. Solo se apaga con su propia perilla, o si el plugin está en bypass.
+
+| Control | ID | Qué hace |
 |---|---|---|
-| **Wow** | Depth, Rate (0,1–2 Hz), Shape | Retardo variable de hasta ±8 ms. Shape: seno → triángulo → deriva aleatoria suave |
-| **Flutter** | Depth, Rate (4–15 Hz), Variation | Retardo variable de hasta ±0,6 ms. Variation aleatoriza velocidad y amplitud |
-| **Vinyl** | Amount, Crackle Type, Drop | Hiss rosa + ráfagas de crackle (Normal / Dusty / Heavy). Drop: bajada ocasional de tono y nivel (cada ~30 s con Drop=0 % hasta ~5 s con 100 %) |
-| **Degrade** | Amount, Bandwidth, Smoothing | Suaviza transitorios → saturación suave → pasa-altos y pasa-bajos. Bandwidth: de 500 Hz–1,2 kHz (estrecho) a 40 Hz–12 kHz (ancho) |
+| **Wow Depth** | `texWowDepth` | Retardo variable de hasta ±8 ms, con deriva aleatoria suave |
+| **Wow Rate** | `texWowRate` | 0,1–2 Hz |
+| **Flutter Depth** | `texFlutterDepth` | Retardo variable de hasta ±0,6 ms |
+| **Flutter Rate** | `texFlutterRate` | 4–15 Hz |
+| **Vinyl Amount** | `texVinylAmount` | Nivel del hiss rosa y del crackle (ruido global, fuera de la cadena) |
+| **Vinyl Drop** | `texVinylDrop` | Bajada ocasional de tono y nivel (cada ~30 s con 0 % hasta ~5 s con 100 %) |
+| **Degrade** | `texDegradeAmount` | **Una sola perilla**: Amount, Bandwidth y Smoothing juntos. Sube el suavizado de transitorios y la saturación, y estrecha el ancho de banda (de 40 Hz–12 kHz a unos 130 Hz–2,4 kHz) |
 
 Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 
-- **Sin latencia.** El retardo es `profundidad × (1 + modulación)`, así que con Wow, Flutter y Drop a 0 la señal pasa bit a bit. El retardo medio crece con la profundidad (hasta unos 8 ms con Wow al máximo), lo que forma parte del efecto.
-- La desviación de tono depende de la velocidad: con Wow al 100 % y 1 Hz es de ±5 % (a 2 Hz, ±10 %); Flutter al 100 % y 10 Hz, ±3,8 %.
-- Los cambios de profundidad son lentos a propósito (0,5 s en Wow): una rampa rápida del retardo doblaría el tono.
-- El ruido es aditivo y no depende del nivel de entrada. Tiene semillas fijas, así que dos renders iguales dan el mismo resultado.
-- **Valores por defecto:** Wow 25 %, Flutter 15 %, Vinyl 20 %, Degrade 25 %. A diferencia del Módulo 0, el plugin **ya no es transparente** con los valores por defecto.
-- Un estado guardado antes del Módulo 1 se carga bien. Los parámetros de Texture que no estén en él conservan su valor actual.
-
-### Parámetros de Texture (versión 1)
-
-| ID | Rango | Defecto |
-|---|---|---|
-| `texEnable` | on/off | on |
-| `texMix` | 0–100 % | 100 % |
-| `texWowDepth` / `texWowShape` | 0–100 % | 25 % / 0 % |
-| `texWowRate` | 0,1–2 Hz | 0,6 Hz |
-| `texFlutterDepth` / `texFlutterVariation` | 0–100 % | 15 % / 30 % |
-| `texFlutterRate` | 4–15 Hz | 8 Hz |
-| `texVinylAmount` / `texVinylDrop` | 0–100 % | 20 % / 0 % |
-| `texCrackleType` | Normal, Dusty, Heavy | Normal |
-| `texDegradeAmount` / `texDegradeBandwidth` / `texDegradeSmoothing` | 0–100 % | 25 % / 60 % / 30 % |
+- **Sin latencia.** El retardo es `profundidad × (1 + modulación)`, así que con Wow, Flutter y Drop a 0 la señal pasa bit a bit. El retardo medio crece con la profundidad (hasta unos 8 ms con Wow al máximo).
+- Desviación de tono: Wow al 100 % y 1 Hz, ±5 %; Flutter al 100 % y 10 Hz, ±3,8 %.
+- Los cambios de profundidad son lentos a propósito (0,5 s en Wow).
+- Valores fijos internos: Wow Shape 0 (seno + deriva), Flutter Variation 30 %.
+- El ruido tiene semillas fijas: dos renders iguales dan el mismo resultado.
+- **Valores por defecto:** Wow 25 %, Flutter 15 %, Vinyl Amount 20 %, Degrade 25 %. El plugin **no es transparente** con los valores por defecto.
+- Los parámetros eliminados (Shape, Variation, Crackle Type, Degrade Bandwidth/Smoothing) se ignoran al cargar estados antiguos.
 
 ## Módulo 2 — Color
 
-Flujo: `entrada → Saturación → Tone → Focus → Magic Chorus`.
+Flujo: `entrada → Saturación → Tone → Magic Chorus`. Tres perillas y un selector.
 
-| Sección | Controles | Cómo funciona |
+| Control | ID | Qué hace |
 |---|---|---|
-| **Drive + Type** | Drive, Tube / Tape / Console | De 0 a +24 dB hacia la curva, con compensación de nivel. **Tube:** tanh con sesgo (armónicos pares e impares) y bloqueador de DC. **Tape:** curva suave simétrica (impares) con pérdida de agudos que crece con Drive (16 kHz → 7 kHz). **Console:** recorte cúbico simétrico, más seco y tenso |
-| **Tone** | −100…+100 % | Inclinación de ±6 dB alrededor de 700 Hz: positivo más brillante, negativo más oscuro |
-| **Focus** | Low (20–1000 Hz), High (2–20 kHz), Amount | Pasa-altos + pasa-bajos de 12 dB/oct; Amount mezcla la señal limpia con la filtrada |
-| **Magic Chorus** | Amount, Rate (0,05–5 Hz), Depth, Width, Mix, Mode | **Classic:** 1 voz de ~10 ms. **Dimension:** 2 voces en oposición de fase, cortas y sutiles. **Ensemble:** 3 voces a 120° con velocidades distintas. Width desfasa el LFO entre L y R |
+| **Drive** | `colDrive` | De 0 a +24 dB hacia la curva, con compensación de nivel |
+| **Color Type** | `colType` | **Tube:** tanh con sesgo (pares e impares) y bloqueador de DC. **Tape:** curva simétrica (impares) con pérdida de agudos creciente. **Console:** recorte cúbico simétrico, más seco |
+| **Tone** | `colTone` | −100…+100 %: inclinación de ±6 dB alrededor de 700 Hz |
+| **Magic Chorus** | `colChorusAmount` | **Una sola perilla**: 0 = apagado (bit a bit); al subir aumenta la mezcla del coro. Modo Ensemble (3 voces) fijo, Rate 0,6 Hz, Depth y Width altos |
 
 Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
 
-- **Anti-aliasing:** ADAA de primer orden (antiderivada) en las tres curvas, **sin latencia ni sobremuestreo**. Medido: unos 9 dB menos de aliasing en un seno de 5,9 kHz con Drive al máximo. El oversampling 2x/4x sigue previsto en el Módulo 9.
-- **Amount del chorus** escala la profundidad de modulación y lo apaga en 0; **Mix** es su balance dry/wet.
-- Cambiar el tipo de saturación o el modo del chorus hace un fundido (10 ms y 30 ms), sin clicks.
-- **Sin latencia.** El retardo del chorus (6–18 ms) es el propio efecto y no se compensa.
-- **Valores por defecto:** Drive 25 % Tube, Tone 0, Focus 0 %, Chorus Amount 60 % (Classic, Mix 50 %). Con Drive, Tone, Focus y Chorus Amount a 0, el módulo es transparente bit a bit.
-
-### Parámetros de Color (versión 1)
-
-| ID | Rango | Defecto |
-|---|---|---|
-| `colEnable` | on/off | on |
-| `colMix` | 0–100 % | 100 % |
-| `colDrive` | 0–100 % | 25 % |
-| `colType` | Tube, Tape, Console | Tube |
-| `colTone` | −100…+100 % | 0 % |
-| `colFocusLow` / `colFocusHigh` | 20–1000 Hz / 2–20 kHz | 80 Hz / 14 kHz |
-| `colFocusAmount` | 0–100 % | 0 % |
-| `colChorusAmount` / `colChorusDepth` / `colChorusWidth` / `colChorusMix` | 0–100 % | 60 % / 70 % / 70 % / 50 % |
-| `colChorusRate` | 0,05–5 Hz | 0,8 Hz |
-| `colChorusMode` | Classic, Dimension, Ensemble | Classic |
+- **Anti-aliasing:** ADAA de primer orden, sin latencia ni sobremuestreo (unos 9 dB menos de aliasing con Drive al máximo). El oversampling 2x/4x llega en el Módulo 9.
+- Cambiar el tipo de saturación hace un fundido de 10 ms, sin clicks.
+- `ChorusProcessor` conserva los modos Classic/Dimension/Ensemble y sus parámetros completos para uso futuro; Color solo expone la perilla.
+- **Valores por defecto:** Drive 25 % Tube, Tone 0, Magic Chorus 50 %. Con Drive, Tone y Magic Chorus a 0, el módulo es transparente bit a bit.
+- Los parámetros eliminados (Focus y los controles del chorus) se ignoran al cargar estados antiguos.
 
 ## Pruebas
 
-`ColorTests` (90 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT** (Tube: 2º y 3º; Tape y Console: solo impares, 2º por debajo de −70 dB), **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone (±5,7 dB) y Focus, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix y Amount, Width, cambios de modo/tipo/Drive sin clicks, resultados idénticos con cualquier tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
+`ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
-`TextureTests` (93 comprobaciones): retardo Hermite, salida idéntica a la entrada con todo apagado, **desviación de tono medida por cruces por cero** (Wow ±5 %, Flutter ±3,8 %, mitad de profundidad = mitad de desviación), niveles de hiss y crackle por tipo, drop (caída de nivel y de tono), respuesta en frecuencia de Degrade, suavizado de transitorios, resultados idénticos con cualquier tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
+`TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
 
-`CoreTests` (248 comprobaciones) cubre:
+`CoreTests` (264 comprobaciones) cubre, además, el ruido de vinilo (nivel, estéreo, independencia de la cadena, bloques, asignaciones):
 
 - Silencio, transparencia bit a bit con los valores por defecto (mono y estéreo) y ganancias.
 - Orden de la cadena.
@@ -230,6 +205,6 @@ Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
 - [ ] Compilación MSVC en Debug y Release, sin avisos con `/W4`.
 - [ ] `ctest` en verde en Windows.
 - [ ] Carga en FL Studio 2026, audio entrante y saliente, automatización, bypass y guardado/carga de proyecto.
-- [ ] Color en FL Studio: comparar Tube / Tape / Console, mover Tone y Focus, probar los tres modos del chorus en estéreo y comprobar que cambiar de tipo o de modo no hace clicks.
-- [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl, Degrade) y comprobar que el Dry/Wet y el encendido no hacen clicks.
+- [ ] Color en FL Studio: comparar Tube / Tape / Console, mover Tone y Magic Chorus en estéreo y comprobar que cambiar de tipo no hace clicks.
+- [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl Amount/Drop, Degrade) y comprobar que el vinilo suena igual con Color activado o apagado y comprobar que el Dry/Wet y el encendido no hacen clicks.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

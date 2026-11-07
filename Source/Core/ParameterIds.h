@@ -27,21 +27,18 @@ namespace vm::param
     inline constexpr float mixMaxPercent = 100.0f;
     inline constexpr float mixDefaultPercent = 100.0f;
 
+    // --- Vinyl noise (global: added at the very end of the plugin) ---
+    inline constexpr const char* vinylAmount       = "texVinylAmount";    // percent (ID kept from v0.2)
+
     // --- Module 1: TEXTURE (v1) ---
-    inline constexpr const char* texEnable           = "texEnable";           // bool
-    inline constexpr const char* texMix              = "texMix";              // percent
-    inline constexpr const char* texWowDepth         = "texWowDepth";         // percent
-    inline constexpr const char* texWowRate          = "texWowRate";          // Hz
-    inline constexpr const char* texWowShape         = "texWowShape";         // percent
-    inline constexpr const char* texFlutterDepth     = "texFlutterDepth";     // percent
-    inline constexpr const char* texFlutterRate      = "texFlutterRate";      // Hz
-    inline constexpr const char* texFlutterVariation = "texFlutterVariation"; // percent
-    inline constexpr const char* texVinylAmount      = "texVinylAmount";      // percent
-    inline constexpr const char* texCrackleType      = "texCrackleType";      // choice: Normal/Dusty/Heavy
-    inline constexpr const char* texVinylDrop        = "texVinylDrop";        // percent
-    inline constexpr const char* texDegradeAmount    = "texDegradeAmount";    // percent
-    inline constexpr const char* texDegradeBandwidth = "texDegradeBandwidth"; // percent
-    inline constexpr const char* texDegradeSmoothing = "texDegradeSmoothing"; // percent
+    inline constexpr const char* texEnable         = "texEnable";         // bool
+    inline constexpr const char* texMix            = "texMix";            // percent
+    inline constexpr const char* texWowDepth       = "texWowDepth";       // percent
+    inline constexpr const char* texWowRate        = "texWowRate";        // Hz
+    inline constexpr const char* texFlutterDepth   = "texFlutterDepth";   // percent
+    inline constexpr const char* texFlutterRate    = "texFlutterRate";    // Hz
+    inline constexpr const char* texVinylDrop      = "texVinylDrop";      // percent
+    inline constexpr const char* texDegradeAmount  = "texDegradeAmount";  // percent (one-knob Degrade)
 
     // --- Module 2: COLOR (v1) ---
     inline constexpr const char* colEnable         = "colEnable";         // bool
@@ -49,15 +46,7 @@ namespace vm::param
     inline constexpr const char* colDrive          = "colDrive";          // percent
     inline constexpr const char* colType           = "colType";           // choice: Tube/Tape/Console
     inline constexpr const char* colTone           = "colTone";           // -100..+100 percent
-    inline constexpr const char* colFocusLow       = "colFocusLow";       // Hz
-    inline constexpr const char* colFocusHigh      = "colFocusHigh";      // Hz
-    inline constexpr const char* colFocusAmount    = "colFocusAmount";    // percent
-    inline constexpr const char* colChorusAmount   = "colChorusAmount";   // percent
-    inline constexpr const char* colChorusRate     = "colChorusRate";     // Hz
-    inline constexpr const char* colChorusDepth    = "colChorusDepth";    // percent
-    inline constexpr const char* colChorusWidth    = "colChorusWidth";    // percent
-    inline constexpr const char* colChorusMix      = "colChorusMix";      // percent
-    inline constexpr const char* colChorusMode     = "colChorusMode";     // choice: Classic/Dimension/Ensemble
+    inline constexpr const char* colMagicChorus    = "colChorusAmount";   // percent (ID kept from v0.3)
 
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;

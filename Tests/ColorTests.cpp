@@ -1,6 +1,7 @@
 // Vintage Maker — Module 2 (COLOR) tests. Console program, no JUCE.
 // Exit code 0 = all checks passed.
 
+#include "DSP/Color/ChorusProcessor.h"
 #include "DSP/Color/ColorProcessor.h"
 
 #include <algorithm>
@@ -14,6 +15,11 @@
 #include <new>
 #include <random>
 #include <vector>
+
+// GCC mis-reports the replaced global allocators below once they are inlined.
+#if defined(__GNUC__) && ! defined(__clang__)
+ #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
 
 static std::atomic<bool> countAllocations { false };
 static std::atomic<long> allocationCount { 0 };
@@ -31,7 +37,16 @@ void* operator new (std::size_t size)
 
 void operator delete (void* p) noexcept { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept { std::free (p); }
-void* operator new[] (std::size_t size) { return operator new (size); }
+void* operator new[] (std::size_t size)
+{
+    if (countAllocations.load (std::memory_order_relaxed))
+        allocationCount.fetch_add (1, std::memory_order_relaxed);
+
+    if (void* p = std::malloc (size == 0 ? 1 : size))
+        return p;
+
+    throw std::bad_alloc();
+}
 void operator delete[] (void* p) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
 
@@ -137,7 +152,7 @@ namespace
     ColorParameters allOff()
     {
         ColorParameters p;
-        p.drive = p.tone = p.focusAmount = p.chorusAmount = 0.0f;
+        p.drive = p.tone = p.magicChorus = 0.0f;
         return p;
     }
 
@@ -158,6 +173,40 @@ namespace
 
         ColorProcessor processor;
     };
+
+    // Drives a ChorusProcessor directly (its mode, rate, depth, width and mix are
+    // fixed inside ColorProcessor, so the full control set is tested here).
+    struct ChorusRig
+    {
+        explicit ChorusRig (const ChorusProcessor::Params& p, double sampleRate = 48000.0, int channels = 2)
+        {
+            chorus.prepare ({ sampleRate, 512, channels });
+            chorus.setParams (p);
+            chorus.reset();
+        }
+
+        void run (Buffer& b, int start = 0, int length = -1)
+        {
+            const int end = length < 0 ? b.samples() : start + length;
+            for (int i = start; i < end; ++i)
+            {
+                chorus.advance();
+                for (int ch = 0; ch < b.channels(); ++ch)
+                {
+                    float& x = b.data[(std::size_t) ch][(std::size_t) i];
+                    x = chorus.process (ch, x);
+                }
+            }
+        }
+
+        ChorusProcessor chorus;
+    };
+
+    ChorusProcessor::Params chorusParams (ChorusMode mode, float amount = 1.0f, float rate = 0.8f, float depth = 1.0f,
+                                          float width = 0.5f, float mix = 1.0f)
+    {
+        return { amount, rate, depth, width, mix, mode };
+    }
 
     // ---- spectrum helpers ---------------------------------------------------
 
@@ -387,39 +436,16 @@ namespace
         CHECK_RANGE (toDb (gainAt (p, 8000.0)), 2.0, 3.5); // proportional
     }
 
-    void testFocus()
-    {
-        ColorParameters p = allOff();
-        p.focusLow = 200.0f;
-        p.focusHigh = 4000.0f;
-        p.focusAmount = 1.0f;
-
-        const double low = toDb (gainAt (p, 50.0)), mid = toDb (gainAt (p, 900.0)), high = toDb (gainAt (p, 16000.0));
-        std::printf ("  focus 200-4000 Hz: 50 Hz %.1f dB, 900 Hz %.1f dB, 16 kHz %.1f dB\n", low, mid, high);
-        CHECK (low < -18.0);
-        CHECK (high < -18.0);
-        CHECK (std::abs (mid) < 1.5);
-
-        p.focusAmount = 0.5f;
-        const double halfLow = gainAt (p, 50.0);
-        CHECK (halfLow > gainAt (allOff(), 50.0) * 0.0 + 0.4 && halfLow < 0.7); // between clean (1) and filtered (~0.06)
-    }
-
     void testChorusPitchModulation()
     {
-        ColorParameters p = allOff();
-        p.chorusAmount = 1.0f;
-        p.chorusDepth = 1.0f;
-        p.chorusRate = 0.8f;
-        p.chorusMix = 1.0f;
-        p.chorusMode = ChorusMode::classic;
+        auto p = chorusParams (ChorusMode::classic);
 
         for (double sr : { 22050.0, 44100.0, 48000.0, 96000.0, 192000.0 })
         {
-            Rig rig (p, sr, 2, 1024);
+            ChorusRig rig (p, sr);
             Buffer b (2, (int) (4 * sr));
             fillSine (b, 1000.0, sr, 0.5f);
-            rig.run (b, 1024);
+            rig.run (b);
             CHECK (allFinite (b));
 
             // Expected: +-2*pi*0.8 Hz*3.5 ms = +-1.76 %
@@ -429,65 +455,52 @@ namespace
         }
 
         // Depth 0.5 = half the deviation.
-        p.chorusDepth = 0.5f;
-        Rig half (p);
+        p.depth = 0.5f;
+        ChorusRig half (p);
         Buffer c (2, 4 * 48000);
         fillSine (c, 1000.0, 48000.0, 0.5f);
-        half.run (c, 512);
+        half.run (c);
         const auto h = measureDeviation (c.data[0], 48000.0, 1000.0, 14400, 4 * 48000);
         CHECK_RANGE (h.high, 0.0068, 0.0110);
     }
 
     void testChorusModesAndMix()
     {
-        ColorParameters p = allOff();
-        p.chorusAmount = 1.0f;
-        p.chorusDepth = 1.0f;
-        p.chorusMix = 1.0f;
-
         Buffer in (2, 48000);
         fillNoise (in, 12, 0.5f);
 
         Buffer results[3] = { in, in, in };
         for (int m = 0; m < 3; ++m)
         {
-            p.chorusMode = (ChorusMode) m;
-            Rig rig (p);
-            rig.run (results[m], 512);
+            ChorusRig rig (chorusParams ((ChorusMode) m));
+            rig.run (results[m]);
             CHECK (allFinite (results[m]));
             const double level = rms (results[m].data[0], 4800, 48000);
             CHECK_RANGE (level, 0.1, 0.5); // wet level stays sensible (input RMS ~0.29)
         }
         CHECK (results[0].data != results[1].data && results[1].data != results[2].data);
 
-        // Mix 0 with chorus on = exactly the input.
-        p.chorusMix = 0.0f;
-        Rig dry (p);
+        // Mix 0 with the chorus on = exactly the input.
+        ChorusRig dry (chorusParams (ChorusMode::ensemble, 1.0f, 0.8f, 1.0f, 0.5f, 0.0f));
         Buffer d = in;
-        dry.run (d, 512);
+        dry.run (d);
         CHECK (d.data == in.data);
 
-        // Amount 0 = exactly the input, whatever the other chorus settings.
-        p.chorusMix = 1.0f;
-        p.chorusAmount = 0.0f;
-        Rig off (p);
+        // Amount 0 = exactly the input.
+        ChorusRig off (chorusParams (ChorusMode::ensemble, 0.0f));
         Buffer o = in;
-        off.run (o, 512);
+        off.run (o);
         CHECK (o.data == in.data);
     }
 
     void testChorusWidth()
     {
-        ColorParameters p = allOff();
-        p.chorusAmount = 1.0f; p.chorusDepth = 1.0f; p.chorusMix = 1.0f; p.chorusRate = 2.0f;
-
         auto channelDifference = [&] (float width)
         {
-            p.chorusWidth = width;
-            Rig rig (p);
+            ChorusRig rig (chorusParams (ChorusMode::classic, 1.0f, 2.0f, 1.0f, width));
             Buffer b (2, 2 * 48000);
             fillSine (b, 440.0, 48000.0, 0.5f); // identical in both channels
-            rig.run (b, 512);
+            rig.run (b);
 
             double diff = 0.0;
             for (int i = 24000; i < b.samples(); ++i)
@@ -503,21 +516,62 @@ namespace
         CHECK (channelDifference (0.5f) < channelDifference (1.0f));
     }
 
+    void testMagicChorusKnob()
+    {
+        // One knob: 0 = off, bit-transparent; up = more modulation and a wide stereo image.
+        Buffer in (2, 2 * 48000);
+        fillSine (in, 440.0, 48000.0, 0.5f); // identical in both channels
+
+        auto render = [&] (float knob)
+        {
+            ColorParameters p = allOff();
+            p.magicChorus = knob;
+            Rig rig (p);
+            Buffer b = in;
+            rig.run (b, 512);
+            return b;
+        };
+
+        CHECK (render (0.0f).data == in.data);
+
+        auto difference = [&] (const Buffer& b)
+        {
+            double sum = 0.0;
+            for (int i = 24000; i < b.samples(); ++i)
+            {
+                const double d = (double) b.data[0][(std::size_t) i] - in.data[0][(std::size_t) i];
+                sum += d * d;
+            }
+            return std::sqrt (sum / (b.samples() - 24000));
+        };
+
+        const Buffer low = render (0.25f), high = render (1.0f);
+        CHECK (allFinite (low) && allFinite (high));
+        CHECK (difference (low) > 0.01);
+        CHECK (difference (high) > difference (low));
+
+        // The ensemble spreads an identical L/R input across the stereo field.
+        double width = 0.0;
+        for (int i = 24000; i < high.samples(); ++i)
+        {
+            const double d = (double) high.data[0][(std::size_t) i] - high.data[1][(std::size_t) i];
+            width += d * d;
+        }
+        CHECK (std::sqrt (width / (high.samples() - 24000)) > 0.02);
+    }
+
     void testClickFreeSwitching()
     {
         // Chorus mode changes.
         {
-            ColorParameters p = allOff();
-            p.chorusAmount = 1.0f; p.chorusDepth = 0.8f; p.chorusMix = 1.0f;
-            Rig rig (p);
+            ChorusRig rig (chorusParams (ChorusMode::classic, 1.0f, 0.8f, 0.8f));
             Buffer b (2, 48000);
             fillSine (b, 1000.0, 48000.0, 0.5f);
 
             for (int start = 0, k = 0; start < b.samples(); start += 4000, ++k)
             {
-                p.chorusMode = (ChorusMode) (k % 3);
-                rig.processor.setParameters (p);
-                rig.processor.process (b.view().getSubBlock (start, std::min (4000, b.samples() - start)));
+                rig.chorus.setParams (chorusParams ((ChorusMode) (k % 3), 1.0f, 0.8f, 0.8f));
+                rig.run (b, start, std::min (4000, b.samples() - start));
             }
             CHECK (allFinite (b));
             CHECK (maxStep (b.data[0], 2400, 48000) < 0.4);
@@ -561,9 +615,7 @@ namespace
     void testBlockSizeIndependence()
     {
         ColorParameters p;
-        p.drive = 0.7f; p.type = ColorType::tape; p.tone = 0.4f;
-        p.focusAmount = 0.8f; p.focusLow = 150.0f; p.focusHigh = 9000.0f;
-        p.chorusAmount = 0.9f; p.chorusMode = ChorusMode::ensemble; p.chorusMix = 0.6f;
+        p.drive = 0.7f; p.type = ColorType::tape; p.tone = 0.4f; p.magicChorus = 0.9f;
 
         Buffer in (2, 30000);
         fillNoise (in, 21, 0.5f);
@@ -597,15 +649,7 @@ namespace
             p.drive = -1.0f + 3.0f * u (rng);
             p.type = (ColorType) (int) (u (rng) * 2.99f);
             p.tone = -2.0f + 4.0f * u (rng);
-            p.focusLow = -100.0f + 1500.0f * u (rng);
-            p.focusHigh = 30000.0f * u (rng);
-            p.focusAmount = u (rng);
-            p.chorusAmount = u (rng) < 0.3f ? 0.0f : u (rng);
-            p.chorusRate = -1.0f + 8.0f * u (rng);
-            p.chorusDepth = u (rng);
-            p.chorusWidth = u (rng);
-            p.chorusMix = u (rng);
-            p.chorusMode = (ChorusMode) (int) (u (rng) * 2.99f);
+            p.magicChorus = u (rng) < 0.3f ? 0.0f : -0.5f + 2.0f * u (rng);
             rig.processor.setParameters (p);
             rig.processor.process (b.view().getSubBlock (start, std::min (64, b.samples() - start)));
         }
@@ -618,9 +662,8 @@ namespace
         ColorParameters bad;
         bad.drive = std::numeric_limits<float>::quiet_NaN();
         bad.tone = std::numeric_limits<float>::infinity();
-        bad.focusHigh = -std::numeric_limits<float>::infinity();
+        bad.magicChorus = -std::numeric_limits<float>::infinity();
         bad.type = (ColorType) 99;
-        bad.chorusMode = (ChorusMode) -5;
         Rig nanRig (ColorParameters {});
         nanRig.processor.setParameters (bad);
         Buffer c (2, 8192);
@@ -628,13 +671,13 @@ namespace
         nanRig.run (c, 256);
         CHECK (allFinite (c));
         const auto q = nanRig.processor.getParameters();
-        CHECK (std::isfinite (q.drive) && q.type == ColorType::tube && q.chorusMode == ChorusMode::classic);
+        CHECK (std::isfinite (q.drive) && q.type == ColorType::tube);
     }
 
     void testMonoAndEdgeCases()
     {
         ColorParameters p;
-        p.drive = 0.8f; p.tone = 0.5f; p.focusAmount = 1.0f; p.chorusAmount = 1.0f;
+        p.drive = 0.8f; p.tone = 0.5f; p.magicChorus = 1.0f;
 
         Rig mono (p, 48000.0, 1);
         Buffer m (1, 48000);
@@ -676,8 +719,7 @@ namespace
     void testResetIsRepeatable()
     {
         ColorParameters p;
-        p.drive = 1.0f; p.tone = -0.5f; p.focusAmount = 1.0f;
-        p.chorusAmount = 1.0f; p.chorusMode = ChorusMode::dimension;
+        p.drive = 1.0f; p.tone = -0.5f; p.magicChorus = 1.0f;
 
         Rig rig (p);
         Buffer in (2, 24000);
@@ -708,8 +750,7 @@ namespace
         {
             ColorParameters q;
             q.drive = u (rng); q.type = (ColorType) (int) (u (rng) * 2.99f); q.tone = u (rng) * 2.0f - 1.0f;
-            q.focusAmount = u (rng); q.focusLow = 20.0f + 500.0f * u (rng);
-            q.chorusAmount = u (rng); q.chorusMode = (ChorusMode) (int) (u (rng) * 2.99f);
+            q.magicChorus = u (rng);
             rig.processor.setParameters (q);
             rig.processor.process (b.view().getSubBlock (start, 1000));
         }
@@ -722,8 +763,7 @@ namespace
     void testPerformance()
     {
         ColorParameters p;
-        p.drive = 0.7f; p.tone = 0.3f; p.focusAmount = 0.6f; p.chorusAmount = 0.8f;
-        p.chorusMode = ChorusMode::ensemble;
+        p.drive = 0.7f; p.tone = 0.3f; p.magicChorus = 0.8f;
 
         Rig rig (p, 48000.0, 2, 512);
         Buffer b (2, 512);
@@ -757,10 +797,10 @@ int main()
         { "Saturation: anti-aliasing (ADAA vs naive)", testAntiAliasing },
         { "Saturation: level compensation",           testLevelCompensation },
         { "Tone: bipolar tilt",                       testTone },
-        { "Focus: band-pass and amount",              testFocus },
         { "Chorus: measured pitch modulation",        testChorusPitchModulation },
         { "Chorus: modes, mix, amount",               testChorusModesAndMix },
         { "Chorus: width",                            testChorusWidth },
+        { "Magic Chorus: one knob",                   testMagicChorusKnob },
         { "Click-free: mode / type / drive changes",  testClickFreeSwitching },
         { "Block size independence (bit-exact)",      testBlockSizeIndependence },
         { "Extremes, automation, NaN/Inf",            testExtremesAndAutomation },

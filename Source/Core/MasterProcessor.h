@@ -2,6 +2,7 @@
 
 #include "AudioEngine.h"
 #include "SmoothedValue.h"
+#include "VinylNoise.h"
 
 #include <vector>
 
@@ -12,6 +13,7 @@ namespace vm
         float inputGainDb = 0.0f;   // -24 .. +24
         float outputGainDb = 0.0f;  // -24 .. +24
         float mix = 1.0f;           // 0 .. 1 (dry = original input, before input gain)
+        float vinylAmount = 0.0f;   // 0 .. 1: vinyl noise added at the very end
         bool bypass = false;
 
         bool operator== (const MasterParameters&) const = default;
@@ -22,6 +24,10 @@ namespace vm
     //   wet       = Engine (inputGain * x)
     //   processed = outputGain * (x + mix * (wet - x))
     //   y         = x + active * (processed - x)        active: 1 = on, 0 = bypassed
+    //   out       = y + active * vinylNoise
+    //
+    // The vinyl noise is added last, so no module, the master mix or the output
+    // gain can alter it. It follows the bypass (silent when bypassed).
     //
     // Output gain is applied after the master mix so it sets the plugin's final
     // level at any mix position. Master bypass is a true, click-free pass-through
@@ -53,8 +59,10 @@ namespace vm
 
     private:
         void processChunk (AudioBufferView block) noexcept;
+        void addVinyl (AudioBufferView block) noexcept; // output stage, fully-on path
 
         AudioEngine engine;
+        VinylNoise vinyl;
         std::vector<float> dryStorage;
         ProcessSpec currentSpec;
         MasterParameters parameters;

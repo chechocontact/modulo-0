@@ -21,6 +21,11 @@
 // Allocation counter: every global new is counted while `countAllocations` is
 // set, so we can prove process() never allocates.
 // ---------------------------------------------------------------------------
+// GCC mis-reports the replaced global allocators below once they are inlined.
+#if defined(__GNUC__) && ! defined(__clang__)
+ #pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
+
 static std::atomic<bool> countAllocations { false };
 static std::atomic<long> allocationCount { 0 };
 
@@ -37,7 +42,16 @@ void* operator new (std::size_t size)
 
 void operator delete (void* p) noexcept { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept { std::free (p); }
-void* operator new[] (std::size_t size) { return operator new (size); }
+void* operator new[] (std::size_t size)
+{
+    if (countAllocations.load (std::memory_order_relaxed))
+        allocationCount.fetch_add (1, std::memory_order_relaxed);
+
+    if (void* p = std::malloc (size == 0 ? 1 : size))
+        return p;
+
+    throw std::bad_alloc();
+}
 void operator delete[] (void* p) noexcept { std::free (p); }
 void operator delete[] (void* p, std::size_t) noexcept { std::free (p); }
 
@@ -451,7 +465,7 @@ namespace
         {
             Rig rig (48000.0, 512);
             rig.test (Slot::color).setParameters ({ -3.0f, false });
-            rig.params = { 4.0f, -2.0f, 0.7f, false };
+            rig.params = { 4.0f, -2.0f, 0.7f, 0.0f, false };
             Buffer out = in;
             rig.run (out, blockSize);
             return out;
@@ -520,7 +534,7 @@ namespace
 
         // NaN parameters must not reach the audio.
         Rig nanRig;
-        nanRig.params = { std::nanf (""), std::numeric_limits<float>::infinity(), std::nanf (""), false };
+        nanRig.params = { std::nanf (""), std::numeric_limits<float>::infinity(), std::nanf (""), std::nanf (""), false };
         Buffer c (2, 4096);
         fillSine (c, 500.0, 48000.0);
         nanRig.run (c, 256);
@@ -582,7 +596,7 @@ namespace
         int index = 0;
         for (int start = 0; start + 2000 <= b.samples(); start += 2000, ++index)
         {
-            rig.params = { 12.0f * u (rng), -6.0f * u (rng), u (rng), index % 5 == 0 };
+            rig.params = { 12.0f * u (rng), -6.0f * u (rng), u (rng), u (rng), index % 5 == 0 };
             rig.master.getEngine().getSlot (Slot::movement).setEnabled (index % 3 != 0);
             rig.master.setParameters (rig.params);
             rig.master.process (b.view().getSubBlock (start, 2000)); // > maxBlock: chunked
@@ -592,10 +606,155 @@ namespace
         CHECK (allocationCount.load() == 0);
     }
 
+    // ------------------------------------------------------- vinyl noise stage
+
+    // Noise-only render: silence in, vinyl on.
+    double vinylRmsDb (MasterParameters p, Rig& rig, Buffer& b)
+    {
+        rig.params = p;
+        rig.master.reset();
+        rig.run (b, 512);
+        return 20.0 * std::log10 (std::max (1.0e-12, std::sqrt ([&]
+        {
+            double sum = 0.0;
+            for (int i = 4800; i < b.samples(); ++i)
+                sum += (double) b.at (0, i) * b.at (0, i);
+            return sum / (b.samples() - 4800);
+        }())));
+    }
+
+    void testVinylNoiseLevelAndStereo()
+    {
+        MasterParameters p;
+        p.vinylAmount = 1.0f;
+
+        Rig rig;
+        Buffer b (2, 10 * 48000);
+        const double fullDb = vinylRmsDb (p, rig, b);
+        std::printf ("  vinyl amount 1.0: %.1f dBFS RMS\n", fullDb);
+        CHECK (fullDb > -56.0 && fullDb < -44.0);
+
+        double dot = 0.0, n0 = 0.0, n1 = 0.0;
+        for (int i = 4800; i < b.samples(); ++i)
+        {
+            dot += (double) b.at (0, i) * b.at (1, i);
+            n0 += (double) b.at (0, i) * b.at (0, i);
+            n1 += (double) b.at (1, i) * b.at (1, i);
+        }
+        CHECK (std::abs (dot / std::sqrt (n0 * n1)) < 0.1); // channels are independent
+
+        Rig half;
+        Buffer c (2, 10 * 48000);
+        p.vinylAmount = 0.5f;
+        CHECK (vinylRmsDb (p, half, c) < fullDb - 3.0);
+
+        // Amount 0 = no noise at all.
+        Rig off;
+        Buffer d (2, 48000);
+        p.vinylAmount = 0.0f;
+        rig.params = p;
+        off.params = p;
+        off.run (d, 512);
+        bool silent = true;
+        for (float s : d.data[0]) silent = silent && s == 0.0f;
+        CHECK (silent);
+
+        // Crackle ticks exist: some samples are far above the hiss.
+        double peak = 0.0;
+        for (int i = 4800; i < b.samples(); ++i)
+            peak = std::max (peak, (double) std::abs (b.at (0, i)));
+        CHECK (20.0 * std::log10 (peak) > fullDb + 12.0);
+    }
+
+    void testVinylIsIndependentOfTheChain()
+    {
+        // Reference: vinyl alone.
+        MasterParameters ref;
+        ref.vinylAmount = 0.8f;
+        Rig a;
+        Buffer ba (2, 6 * 48000);
+        const double baseline = vinylRmsDb (ref, a, ba);
+
+        // Everything that could change it, pushed to the extreme: all four
+        // modules muting the signal, master mix at 0, input and output gain at -24 dB.
+        Rig b;
+        for (auto s : allSlots)
+            b.test (s).setParameters ({ -60.0f, false });
+        MasterParameters hostile = ref;
+        hostile.inputGainDb = -24.0f;
+        hostile.outputGainDb = -24.0f;
+        hostile.mix = 0.0f;
+        Buffer bb (2, 6 * 48000);
+        const double hostileDb = vinylRmsDb (hostile, b, bb);
+        std::printf ("  vinyl alone %.2f dBFS, behind a hostile chain %.2f dBFS\n", baseline, hostileDb);
+        CHECK (std::abs (hostileDb - baseline) < 0.01);
+        CHECK (ba.data == bb.data); // bit-identical noise
+
+        // The input signal does not touch the noise: out - in is the noise.
+        Rig c;
+        Buffer in (2, 6 * 48000);
+        fillSine (in, 1000.0, 48000.0, 0.8f);
+        Buffer out = in;
+        c.params = ref;
+        c.master.reset();
+        c.run (out, 512);
+        double maxDiff = 0.0;
+        for (int i = 0; i < out.samples(); ++i)
+            maxDiff = std::max (maxDiff, (double) std::abs (out.at (0, i) - in.at (0, i) - ba.at (0, i)));
+        CHECK (maxDiff < 1.0e-6);
+
+        // Bypass silences the noise and returns the input exactly.
+        Rig d;
+        d.params = ref;
+        d.params.bypass = true;
+        Buffer e = in;
+        d.run (e, 480);
+        bool exact = true;
+        for (int i = 4800; i < e.samples(); ++i)
+            exact = exact && e.at (0, i) == in.at (0, i);
+        CHECK (exact);
+    }
+
+    void testVinylBlockSizeAndAllocation()
+    {
+        MasterParameters p;
+        p.vinylAmount = 0.7f;
+        p.mix = 0.6f;
+        p.outputGainDb = -3.0f;
+
+        auto render = [&] (int blockSize)
+        {
+            Rig rig;
+            rig.params = p;
+            rig.master.reset();
+            Buffer b (2, 20000);
+            fillSine (b, 300.0, 48000.0, 0.4f);
+            rig.run (b, blockSize);
+            return b;
+        };
+
+        const Buffer reference = render (64);
+        for (int bs : { 1, 7, 100, 512, 4096, 20000 })
+            CHECK (render (bs).data == reference.data);
+
+        Rig rig;
+        rig.params = p;
+        Buffer b (2, 4096);
+        allocationCount = 0;
+        countAllocations = true;
+        for (int k = 0; k < 20; ++k)
+        {
+            rig.params.vinylAmount = (k % 5) * 0.25f;
+            rig.run (b, 1024);
+        }
+        countAllocations = false;
+        CHECK (allocationCount.load() == 0);
+    }
+
     void testPerformance()
     {
         Rig rig (48000.0, 512);
-        rig.params = { 3.0f, -3.0f, 0.6f, false };
+        rig.params = { 3.0f, -3.0f, 0.6f, 0.5f, false };
         rig.master.getEngine().getSlot (Slot::color).setMix (0.5f);
 
         const int seconds = 60;
@@ -641,6 +800,9 @@ int main()
         { "Edge cases",                testEdgeCases },
         { "Latency reporting",         testLatencyReporting },
         { "No allocation in process()", testNoAllocationInProcess },
+        { "Vinyl noise: level, stereo, crackle", testVinylNoiseLevelAndStereo },
+        { "Vinyl noise: independent of the chain", testVinylIsIndependentOfTheChain },
+        { "Vinyl noise: block size + allocation", testVinylBlockSizeAndAllocation },
         { "Performance",               testPerformance },
     };
 

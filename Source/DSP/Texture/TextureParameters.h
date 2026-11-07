@@ -2,13 +2,6 @@
 
 namespace vm
 {
-    enum class CrackleType
-    {
-        normal = 0,
-        dusty,
-        heavy
-    };
-
     // Ranges shared by the DSP (clamping) and the plugin layer (host ranges).
     namespace texture
     {
@@ -22,30 +15,30 @@ namespace vm
         inline constexpr double wowMaxExcursionSeconds = 0.008;
         inline constexpr double flutterMaxExcursionSeconds = 0.0006;
         inline constexpr double dropMaxExcursionSeconds = 0.0015;
+
+        // Fixed (no longer user controls)
+        inline constexpr float wowShape = 0.0f;           // sine
+        inline constexpr float flutterVariation = 0.3f;
     }
 
     // All amounts are 0..1; rates are in Hz.
+    //
+    // The vinyl NOISE (Vinyl Amount) is not part of Texture: it is added at the
+    // end of the plugin, see Core/VinylNoise.h and MasterParameters::vinylAmount.
     struct TextureParameters
     {
-        // WOW: slow pitch drift
         float wowDepth = 0.25f;
         float wowRate = 0.6f;
-        float wowShape = 0.0f;          // 0 sine -> 0.5 triangle -> 1 random drift
 
-        // FLUTTER: fast pitch wobble
         float flutterDepth = 0.15f;
         float flutterRate = 8.0f;
-        float flutterVariation = 0.3f;  // randomness of rate and amplitude
 
-        // VINYL: hiss + crackle + occasional warp
-        float vinylAmount = 0.2f;
-        CrackleType crackleType = CrackleType::normal;
-        float vinylDrop = 0.0f;         // 0 = never, 1 = frequent and deep
+        float vinylDrop = 0.0f;   // warp of pitch and level: 0 = never, 1 = frequent and deep
 
-        // DEGRADE: band-limiting, softened transients, mild saturation
-        float degradeAmount = 0.25f;
-        float degradeBandwidth = 0.6f;  // 0 narrow (telephone) .. 1 wide
-        float degradeSmoothing = 0.3f;  // transient softening
+        // One knob for the whole degradation. Amount crossfades from the clean
+        // signal to the degraded one and, as it rises, also narrows the band
+        // and softens transients (see TextureProcessor).
+        float degrade = 0.25f;
 
         bool operator== (const TextureParameters&) const = default;
     };

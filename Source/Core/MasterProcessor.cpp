@@ -28,6 +28,7 @@ namespace vm
         active.prepare (spec.sampleRate, param::smoothingSeconds);
 
         engine.prepare (currentSpec);
+        vinyl.prepare (currentSpec);
         reset();
         prepared = true;
     }
@@ -38,6 +39,7 @@ namespace vm
         outputGain.setCurrentAndTarget (outputGain.getTarget());
         active.setCurrentAndTarget (active.getTarget());
         engine.reset();
+        vinyl.reset();
         engineNeedsReset = false;
     }
 
@@ -52,9 +54,11 @@ namespace vm
         parameters.inputGainDb = sanitise (p.inputGainDb, parameters.inputGainDb, param::gainMinDb, param::gainMaxDb);
         parameters.outputGainDb = sanitise (p.outputGainDb, parameters.outputGainDb, param::gainMinDb, param::gainMaxDb);
         parameters.mix = sanitise (p.mix, parameters.mix, 0.0f, 1.0f);
+        parameters.vinylAmount = sanitise (p.vinylAmount, parameters.vinylAmount, 0.0f, 1.0f);
         parameters.bypass = p.bypass;
 
         engine.setInputGainDb (parameters.inputGainDb);
+        vinyl.setAmount (parameters.vinylAmount);
         outputGain.setTarget (decibelsToGain (parameters.outputGainDb));
         mix.setTarget (parameters.mix);
         active.setTarget (parameters.bypass ? 0.0f : 1.0f);
@@ -71,6 +75,23 @@ namespace vm
 
         for (int start = 0; start < total; start += currentSpec.maxBlockSize)
             processChunk (block.getSubBlock (start, std::min (currentSpec.maxBlockSize, total - start)));
+    }
+
+    void MasterProcessor::addVinyl (AudioBufferView block) noexcept
+    {
+        if (vinyl.isIdle())
+            return;
+
+        const int numSamples = block.getNumSamples();
+        const int numChannels = block.getNumChannels();
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            vinyl.advance();
+
+            for (int ch = 0; ch < numChannels; ++ch)
+                block.getChannel (ch)[i] += vinyl.next (ch);
+        }
     }
 
     void MasterProcessor::processChunk (AudioBufferView block) noexcept
@@ -111,6 +132,7 @@ namespace vm
                         data[i] *= gain;
                 }
 
+            addVinyl (block);
             return;
         }
 
@@ -127,13 +149,14 @@ namespace vm
             const float m = mix.getNext();
             const float g = outputGain.getNext();
             const float a = active.getNext();
+            vinyl.advance();
 
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 const float dry = dryStorage[(std::size_t) (ch * stride + i)];
                 float* out = block.getChannel (ch);
                 const float processed = g * (dry + m * (out[i] - dry));
-                out[i] = dry + a * (processed - dry);
+                out[i] = dry + a * (processed - dry) + a * vinyl.next (ch); // noise last: untouched by modules, mix and gain
             }
         }
     }

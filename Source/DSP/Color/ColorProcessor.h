@@ -3,7 +3,6 @@
 #include "ChorusProcessor.h"
 #include "ColorParameters.h"
 #include "Core/ModuleProcessor.h"
-#include "FocusFilter.h"
 #include "SaturationProcessor.h"
 #include "ToneProcessor.h"
 
@@ -11,10 +10,10 @@ namespace vm
 {
     // Module 2 - COLOR.
     //
-    //   input -> Saturation (Drive, Type) -> Tone -> Focus -> Magic Chorus
+    //   input -> Saturation (Drive, Type) -> Tone -> Magic Chorus
     //
     // Always 100 % wet (bypass and dry/wet belong to ModuleSlot). No latency.
-    // With Drive, Tone, Focus Amount and Chorus Amount at zero it is bit-transparent.
+    // With Drive, Tone and Magic Chorus at zero it is bit-transparent.
     class ColorProcessor final : public ModuleProcessor
     {
     public:
@@ -36,7 +35,6 @@ namespace vm
         ColorParameters parameters;
         SaturationProcessor saturation;
         ToneProcessor tone;
-        FocusFilter focus;
         ChorusProcessor chorus;
         int numChannels = 2;
     };

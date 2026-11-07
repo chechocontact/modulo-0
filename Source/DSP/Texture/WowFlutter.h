@@ -3,7 +3,7 @@
 #include "Core/AudioBufferView.h"
 #include "Core/SmoothedValue.h"
 #include "Core/DelayLine.h"
-#include "NoiseGenerator.h"
+#include "Core/NoiseGenerator.h"
 
 #include <array>
 #include <cmath>
