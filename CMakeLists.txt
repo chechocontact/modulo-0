@@ -29,7 +29,7 @@ add_library(VintageCore STATIC
     Source/DSP/Test/TestProcessor.cpp
     Source/DSP/Texture/TextureParameters.h
     Source/DSP/Texture/NoiseGenerator.h
-    Source/DSP/Texture/DelayLine.h
+    Source/Core/DelayLine.h
     Source/DSP/Texture/WowFlutter.h
     Source/DSP/Texture/WowFlutter.cpp
     Source/DSP/Texture/VinylProcessor.h
@@ -38,6 +38,17 @@ add_library(VintageCore STATIC
     Source/DSP/Texture/DegradeProcessor.cpp
     Source/DSP/Texture/TextureProcessor.h
     Source/DSP/Texture/TextureProcessor.cpp
+    Source/DSP/Color/ColorParameters.h
+    Source/DSP/Color/SaturationProcessor.h
+    Source/DSP/Color/SaturationProcessor.cpp
+    Source/DSP/Color/ToneProcessor.h
+    Source/DSP/Color/ToneProcessor.cpp
+    Source/DSP/Color/FocusFilter.h
+    Source/DSP/Color/FocusFilter.cpp
+    Source/DSP/Color/ChorusProcessor.h
+    Source/DSP/Color/ChorusProcessor.cpp
+    Source/DSP/Color/ColorProcessor.h
+    Source/DSP/Color/ColorProcessor.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -60,7 +71,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests)
+    foreach(test_name CoreTests TextureTests ColorTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 

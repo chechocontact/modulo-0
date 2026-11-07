@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/MasterProcessor.h"
+#include "DSP/Color/ColorProcessor.h"
 #include "DSP/Texture/TextureProcessor.h"
 #include "Plugin/ParameterManager.h"
 
@@ -55,6 +56,7 @@ private:
     vm::ParameterManager parameters;
     vm::MasterProcessor master;
     vm::TextureProcessor* texture = nullptr; // owned by master's engine
+    vm::ColorProcessor* color = nullptr;     // owned by master's engine
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VintageMakerAudioProcessor)
 };

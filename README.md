@@ -12,7 +12,7 @@ Cadena: `INPUT → TEXTURE → COLOR → MOVEMENT → SPACE → OUTPUT`
 |---|---|
 | 0 — Core y fundamentos | **Validado** (Windows + FL Studio) |
 | 1 — Texture | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
-| 2 — Color | Pendiente |
+| 2 — Color | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
 | 3 — Movement | Pendiente |
 | 4 — Space | Pendiente |
 | 5–9 | Pendiente |
@@ -68,6 +68,7 @@ git push -u origin main --tags
 ```text
 Source/
 ├── Core/                  SIN JUCE — flujo de señal y utilidades de tiempo real
+│   ├── DelayLine.h          retardo con interpolación Hermite (compartido por Texture y Color)
 │   ├── AudioBufferView.h    vista no propietaria de audio planar (mono/estéreo)
 │   ├── SmoothedValue.h      rampas lineales de parámetros (anti-clicks)
 │   ├── DenormalGuard.h      FTZ/DAZ por ámbito
@@ -82,16 +83,23 @@ Source/
 │       ├── TextureProcessor.*   orquesta los componentes (siempre 100 % wet)
 │       ├── TextureParameters.h  parámetros, rangos y valores por defecto
 │       ├── WowFlutter.*         modulación de tono con línea de retardo
-│       ├── DelayLine.h          retardo con interpolación Hermite
 │       ├── NoiseGenerator.h     ruido blanco/rosa determinista
 │       ├── VinylProcessor.*     hiss, crackle y "drop"
 │       └── DegradeProcessor.*   transitorios, saturación y ancho de banda
+│   └── Color/               Módulo 2
+│       ├── ColorProcessor.*     Saturación → Tone → Focus → Chorus (siempre 100 % wet)
+│       ├── ColorParameters.h    parámetros, rangos y valores por defecto
+│       ├── SaturationProcessor.* Tube / Tape / Console con ADAA
+│       ├── ToneProcessor.*      inclinación tonal bipolar
+│       ├── FocusFilter.*        pasa-altos + pasa-bajos mezclables
+│       └── ChorusProcessor.*    Classic / Dimension / Ensemble
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
 └── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
 Tests/
 ├── CoreTests.cpp            pruebas del Core (sin JUCE)
-└── TextureTests.cpp         pruebas del Módulo 1 (sin JUCE)
+├── TextureTests.cpp         pruebas del Módulo 1 (sin JUCE)
+└── ColorTests.cpp           pruebas del Módulo 2 (sin JUCE)
 ```
 
 **El Core no depende de JUCE.** Así, todo el DSP se compila y se prueba en segundos en cualquier plataforma, y el plugin solo traduce entre el host y el Core.
@@ -167,7 +175,43 @@ Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 | `texCrackleType` | Normal, Dusty, Heavy | Normal |
 | `texDegradeAmount` / `texDegradeBandwidth` / `texDegradeSmoothing` | 0–100 % | 25 % / 60 % / 30 % |
 
+## Módulo 2 — Color
+
+Flujo: `entrada → Saturación → Tone → Focus → Magic Chorus`.
+
+| Sección | Controles | Cómo funciona |
+|---|---|---|
+| **Drive + Type** | Drive, Tube / Tape / Console | De 0 a +24 dB hacia la curva, con compensación de nivel. **Tube:** tanh con sesgo (armónicos pares e impares) y bloqueador de DC. **Tape:** curva suave simétrica (impares) con pérdida de agudos que crece con Drive (16 kHz → 7 kHz). **Console:** recorte cúbico simétrico, más seco y tenso |
+| **Tone** | −100…+100 % | Inclinación de ±6 dB alrededor de 700 Hz: positivo más brillante, negativo más oscuro |
+| **Focus** | Low (20–1000 Hz), High (2–20 kHz), Amount | Pasa-altos + pasa-bajos de 12 dB/oct; Amount mezcla la señal limpia con la filtrada |
+| **Magic Chorus** | Amount, Rate (0,05–5 Hz), Depth, Width, Mix, Mode | **Classic:** 1 voz de ~10 ms. **Dimension:** 2 voces en oposición de fase, cortas y sutiles. **Ensemble:** 3 voces a 120° con velocidades distintas. Width desfasa el LFO entre L y R |
+
+Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
+
+- **Anti-aliasing:** ADAA de primer orden (antiderivada) en las tres curvas, **sin latencia ni sobremuestreo**. Medido: unos 9 dB menos de aliasing en un seno de 5,9 kHz con Drive al máximo. El oversampling 2x/4x sigue previsto en el Módulo 9.
+- **Amount del chorus** escala la profundidad de modulación y lo apaga en 0; **Mix** es su balance dry/wet.
+- Cambiar el tipo de saturación o el modo del chorus hace un fundido (10 ms y 30 ms), sin clicks.
+- **Sin latencia.** El retardo del chorus (6–18 ms) es el propio efecto y no se compensa.
+- **Valores por defecto:** Drive 25 % Tube, Tone 0, Focus 0 %, Chorus Amount 60 % (Classic, Mix 50 %). Con Drive, Tone, Focus y Chorus Amount a 0, el módulo es transparente bit a bit.
+
+### Parámetros de Color (versión 1)
+
+| ID | Rango | Defecto |
+|---|---|---|
+| `colEnable` | on/off | on |
+| `colMix` | 0–100 % | 100 % |
+| `colDrive` | 0–100 % | 25 % |
+| `colType` | Tube, Tape, Console | Tube |
+| `colTone` | −100…+100 % | 0 % |
+| `colFocusLow` / `colFocusHigh` | 20–1000 Hz / 2–20 kHz | 80 Hz / 14 kHz |
+| `colFocusAmount` | 0–100 % | 0 % |
+| `colChorusAmount` / `colChorusDepth` / `colChorusWidth` / `colChorusMix` | 0–100 % | 60 % / 70 % / 70 % / 50 % |
+| `colChorusRate` | 0,05–5 Hz | 0,8 Hz |
+| `colChorusMode` | Classic, Dimension, Ensemble | Classic |
+
 ## Pruebas
+
+`ColorTests` (90 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT** (Tube: 2º y 3º; Tape y Console: solo impares, 2º por debajo de −70 dB), **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone (±5,7 dB) y Focus, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix y Amount, Width, cambios de modo/tipo/Drive sin clicks, resultados idénticos con cualquier tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `TextureTests` (93 comprobaciones): retardo Hermite, salida idéntica a la entrada con todo apagado, **desviación de tono medida por cruces por cero** (Wow ±5 %, Flutter ±3,8 %, mitad de profundidad = mitad de desviación), niveles de hiss y crackle por tipo, drop (caída de nivel y de tono), respuesta en frecuencia de Degrade, suavizado de transitorios, resultados idénticos con cualquier tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
@@ -186,5 +230,6 @@ Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 - [ ] Compilación MSVC en Debug y Release, sin avisos con `/W4`.
 - [ ] `ctest` en verde en Windows.
 - [ ] Carga en FL Studio 2026, audio entrante y saliente, automatización, bypass y guardado/carga de proyecto.
+- [ ] Color en FL Studio: comparar Tube / Tape / Console, mover Tone y Focus, probar los tres modos del chorus en estéreo y comprobar que cambiar de tipo o de modo no hace clicks.
 - [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl, Degrade) y comprobar que el Dry/Wet y el encendido no hacen clicks.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

@@ -78,6 +78,41 @@ namespace vm
         }
     }
 
+    namespace
+    {
+        void addColorParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+        {
+            const ColorParameters d; // defaults live in one place: ColorParameters
+
+            layout.add (std::make_unique<juce::AudioParameterBool> (makeId (param::colEnable), "Color On", true));
+            addPercent (layout, param::colMix, "Color Dry/Wet", 100.0f);
+
+            addPercent (layout, param::colDrive, "Drive", d.drive * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::colType), "Color Type",
+                juce::StringArray { "Tube", "Tape", "Console" }, (int) d.type));
+
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                makeId (param::colTone), "Tone", juce::NormalisableRange<float> (-100.0f, 100.0f, 0.01f),
+                d.tone * 100.0f,
+                juce::AudioParameterFloatAttributes().withLabel ("%").withStringFromValueFunction (
+                    [] (float v, int) { return (v > 0.0f ? "+" : "") + juce::String (juce::roundToInt (v)) + " %"; })));
+
+            addHz (layout, param::colFocusLow, "Focus Low", color::focusLowMinHz, color::focusLowMaxHz, d.focusLow);
+            addHz (layout, param::colFocusHigh, "Focus High", color::focusHighMinHz, color::focusHighMaxHz, d.focusHigh);
+            addPercent (layout, param::colFocusAmount, "Focus", d.focusAmount * 100.0f);
+
+            addPercent (layout, param::colChorusAmount, "Chorus Amount", d.chorusAmount * 100.0f);
+            addHz (layout, param::colChorusRate, "Chorus Rate", color::chorusRateMinHz, color::chorusRateMaxHz, d.chorusRate);
+            addPercent (layout, param::colChorusDepth, "Chorus Depth", d.chorusDepth * 100.0f);
+            addPercent (layout, param::colChorusWidth, "Chorus Width", d.chorusWidth * 100.0f);
+            addPercent (layout, param::colChorusMix, "Chorus Mix", d.chorusMix * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::colChorusMode), "Chorus Mode",
+                juce::StringArray { "Classic", "Dimension", "Ensemble" }, (int) d.chorusMode));
+        }
+    }
+
     juce::AudioProcessorValueTreeState::ParameterLayout ParameterManager::createLayout()
     {
         using Attributes = juce::AudioParameterFloatAttributes;
@@ -103,6 +138,7 @@ namespace vm
             makeId (param::masterBypass), "Bypass", false));
 
         addTextureParameters (layout);
+        addColorParameters (layout);
 
         return layout;
     }
@@ -130,6 +166,48 @@ namespace vm
         tex.degradeAmount = requireParameter (state, param::texDegradeAmount);
         tex.degradeBandwidth = requireParameter (state, param::texDegradeBandwidth);
         tex.degradeSmoothing = requireParameter (state, param::texDegradeSmoothing);
+
+        col.enable = requireParameter (state, param::colEnable);
+        col.mix = requireParameter (state, param::colMix);
+        col.drive = requireParameter (state, param::colDrive);
+        col.type = requireParameter (state, param::colType);
+        col.tone = requireParameter (state, param::colTone);
+        col.focusLow = requireParameter (state, param::colFocusLow);
+        col.focusHigh = requireParameter (state, param::colFocusHigh);
+        col.focusAmount = requireParameter (state, param::colFocusAmount);
+        col.chorusAmount = requireParameter (state, param::colChorusAmount);
+        col.chorusRate = requireParameter (state, param::colChorusRate);
+        col.chorusDepth = requireParameter (state, param::colChorusDepth);
+        col.chorusWidth = requireParameter (state, param::colChorusWidth);
+        col.chorusMix = requireParameter (state, param::colChorusMix);
+        col.chorusMode = requireParameter (state, param::colChorusMode);
+    }
+
+    ParameterManager::SlotState ParameterManager::readColorSlot() const noexcept
+    {
+        return { col.enable->load (std::memory_order_relaxed) >= 0.5f,
+                 col.mix->load (std::memory_order_relaxed) / 100.0f };
+    }
+
+    ColorParameters ParameterManager::readColorParameters() const noexcept
+    {
+        const auto pct = [] (const std::atomic<float>* a) { return a->load (std::memory_order_relaxed) / 100.0f; };
+        const auto raw = [] (const std::atomic<float>* a) { return a->load (std::memory_order_relaxed); };
+
+        ColorParameters p;
+        p.drive = pct (col.drive);
+        p.type = (ColorType) juce::jlimit (0, 2, juce::roundToInt (raw (col.type)));
+        p.tone = pct (col.tone);
+        p.focusLow = raw (col.focusLow);
+        p.focusHigh = raw (col.focusHigh);
+        p.focusAmount = pct (col.focusAmount);
+        p.chorusAmount = pct (col.chorusAmount);
+        p.chorusRate = raw (col.chorusRate);
+        p.chorusDepth = pct (col.chorusDepth);
+        p.chorusWidth = pct (col.chorusWidth);
+        p.chorusMix = pct (col.chorusMix);
+        p.chorusMode = (ChorusMode) juce::jlimit (0, 2, juce::roundToInt (raw (col.chorusMode)));
+        return p;
     }
 
     ParameterManager::SlotState ParameterManager::readTextureSlot() const noexcept

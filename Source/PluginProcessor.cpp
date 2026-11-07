@@ -9,8 +9,8 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this)
 {
-    // Module 1: Texture is real. The other slots hold the transparent
-    // TestProcessor until Color, Movement and Space are implemented.
+    // Modules 1-2: Texture and Color are real. The other slots hold the
+    // transparent TestProcessor until Movement and Space are implemented.
     using Slot = vm::AudioEngine::Slot;
     auto& engine = master.getEngine();
 
@@ -18,7 +18,11 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
     texture = textureModule.get();
     engine.setModule (Slot::texture, std::move (textureModule));
 
-    for (auto slot : { Slot::color, Slot::movement, Slot::space })
+    auto colorModule = std::make_unique<vm::ColorProcessor>();
+    color = colorModule.get();
+    engine.setModule (Slot::color, std::move (colorModule));
+
+    for (auto slot : { Slot::movement, Slot::space })
         engine.setModule (slot, std::make_unique<vm::TestProcessor>());
 }
 
@@ -67,6 +71,13 @@ void VintageMakerAudioProcessor::applyModuleParameters() noexcept
     textureSlot.setMix (slot.mix);
 
     texture->setParameters (parameters.readTextureParameters());
+
+    const auto colorState = parameters.readColorSlot();
+    auto& colorSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::color);
+    colorSlot.setEnabled (colorState.enabled);
+    colorSlot.setMix (colorState.mix);
+
+    color->setParameters (parameters.readColorParameters());
 }
 
 void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buffer,

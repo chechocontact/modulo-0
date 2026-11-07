@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/MasterProcessor.h"
+#include "DSP/Color/ColorParameters.h"
 #include "DSP/Texture/TextureParameters.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -31,6 +32,8 @@ namespace vm
 
         SlotState readTextureSlot() const noexcept;
         TextureParameters readTextureParameters() const noexcept;
+        SlotState readColorSlot() const noexcept;
+        ColorParameters readColorParameters() const noexcept;
 
         // Message thread (or any thread the host chooses; uses the APVTS lock).
         void saveState (juce::MemoryBlock& destination);
@@ -64,5 +67,23 @@ namespace vm
             std::atomic<float>* degradeBandwidth = nullptr;
             std::atomic<float>* degradeSmoothing = nullptr;
         } tex;
+
+        struct ColorHandles
+        {
+            std::atomic<float>* enable = nullptr;
+            std::atomic<float>* mix = nullptr;
+            std::atomic<float>* drive = nullptr;
+            std::atomic<float>* type = nullptr;
+            std::atomic<float>* tone = nullptr;
+            std::atomic<float>* focusLow = nullptr;
+            std::atomic<float>* focusHigh = nullptr;
+            std::atomic<float>* focusAmount = nullptr;
+            std::atomic<float>* chorusAmount = nullptr;
+            std::atomic<float>* chorusRate = nullptr;
+            std::atomic<float>* chorusDepth = nullptr;
+            std::atomic<float>* chorusWidth = nullptr;
+            std::atomic<float>* chorusMix = nullptr;
+            std::atomic<float>* chorusMode = nullptr;
+        } col;
     };
 }

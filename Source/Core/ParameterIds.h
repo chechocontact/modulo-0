@@ -43,6 +43,22 @@ namespace vm::param
     inline constexpr const char* texDegradeBandwidth = "texDegradeBandwidth"; // percent
     inline constexpr const char* texDegradeSmoothing = "texDegradeSmoothing"; // percent
 
+    // --- Module 2: COLOR (v1) ---
+    inline constexpr const char* colEnable         = "colEnable";         // bool
+    inline constexpr const char* colMix            = "colMix";            // percent
+    inline constexpr const char* colDrive          = "colDrive";          // percent
+    inline constexpr const char* colType           = "colType";           // choice: Tube/Tape/Console
+    inline constexpr const char* colTone           = "colTone";           // -100..+100 percent
+    inline constexpr const char* colFocusLow       = "colFocusLow";       // Hz
+    inline constexpr const char* colFocusHigh      = "colFocusHigh";      // Hz
+    inline constexpr const char* colFocusAmount    = "colFocusAmount";    // percent
+    inline constexpr const char* colChorusAmount   = "colChorusAmount";   // percent
+    inline constexpr const char* colChorusRate     = "colChorusRate";     // Hz
+    inline constexpr const char* colChorusDepth    = "colChorusDepth";    // percent
+    inline constexpr const char* colChorusWidth    = "colChorusWidth";    // percent
+    inline constexpr const char* colChorusMix      = "colChorusMix";      // percent
+    inline constexpr const char* colChorusMode     = "colChorusMode";     // choice: Classic/Dimension/Ensemble
+
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;
 }
