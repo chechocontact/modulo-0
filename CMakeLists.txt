@@ -60,6 +60,13 @@ add_library(VintageCore STATIC
     Source/DSP/Movement/TremoloProcessor.cpp
     Source/DSP/Movement/MovementProcessor.h
     Source/DSP/Movement/MovementProcessor.cpp
+    Source/DSP/Space/SpaceParameters.h
+    Source/DSP/Space/DelayProcessor.h
+    Source/DSP/Space/DelayProcessor.cpp
+    Source/DSP/Space/ReverbProcessor.h
+    Source/DSP/Space/ReverbProcessor.cpp
+    Source/DSP/Space/SpaceProcessor.h
+    Source/DSP/Space/SpaceProcessor.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -82,7 +89,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests ColorTests MovementTests)
+    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 

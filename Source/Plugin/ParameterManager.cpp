@@ -104,6 +104,39 @@ namespace vm
                 makeId (param::movStyle), "Style",
                 juce::StringArray { "Frozen", "Drift", "Cloud" }, (int) d.style));
         }
+
+        // Time is 0..100 %. Free: 20 ms..1.5 s (exponential). With Sync it picks a
+        // division, so the text shows both: "215 ms | 1/8" (the division applies when Sync is on).
+        juce::String formatSpaceTime (float percent, int)
+        {
+            const float t = percent / 100.0f;
+            const float ms = space::freeTimeSeconds (t) * 1000.0f;
+            return (ms < 100.0f ? juce::String (ms, 1) : juce::String (juce::roundToInt (ms))) + " ms | "
+                   + space::divisionNames[(std::size_t) space::divisionIndex (t)];
+        }
+
+        void addSpaceParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+        {
+            const SpaceParameters d; // defaults live in one place: SpaceParameters
+
+            layout.add (std::make_unique<juce::AudioParameterBool> (makeId (param::spcEnable), "Space On", true));
+            addPercent (layout, param::spcMix, "Space Dry/Wet", 100.0f);
+
+            addPercent (layout, param::spcDelay, "Delay", d.delay * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                makeId (param::spcTime), "Time", juce::NormalisableRange<float> (0.0f, 100.0f, 0.01f), d.time * 100.0f,
+                juce::AudioParameterFloatAttributes().withStringFromValueFunction (formatSpaceTime)));
+            addPercent (layout, param::spcFeedback, "Delay Feedback", d.feedback * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterBool> (makeId (param::spcSync), "Sync", d.sync));
+
+            addPercent (layout, param::spcReverbMix, "Reverb Mix", d.mix * 100.0f);
+            addPercent (layout, param::spcDecay, "Decay", d.decay * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::spcType), "Reverb Type",
+                juce::StringArray { "Room", "Plate", "Hall" }, (int) d.type));
+
+            addPercent (layout, param::spcWidth, "Width", d.width * 100.0f);
+        }
     }
 
     juce::AudioProcessorValueTreeState::ParameterLayout ParameterManager::createLayout()
@@ -135,6 +168,7 @@ namespace vm
         addTextureParameters (layout);
         addColorParameters (layout);
         addMovementParameters (layout);
+        addSpaceParameters (layout);
 
         return layout;
     }
@@ -172,6 +206,17 @@ namespace vm
         mov.tremolo = requireParameter (state, param::movTremolo);
         mov.rate = requireParameter (state, param::movRate);
         mov.style = requireParameter (state, param::movStyle);
+
+        spc.enable = requireParameter (state, param::spcEnable);
+        spc.mix = requireParameter (state, param::spcMix);
+        spc.delay = requireParameter (state, param::spcDelay);
+        spc.time = requireParameter (state, param::spcTime);
+        spc.feedback = requireParameter (state, param::spcFeedback);
+        spc.sync = requireParameter (state, param::spcSync);
+        spc.reverbMix = requireParameter (state, param::spcReverbMix);
+        spc.decay = requireParameter (state, param::spcDecay);
+        spc.type = requireParameter (state, param::spcType);
+        spc.width = requireParameter (state, param::spcWidth);
     }
 
     MasterParameters ParameterManager::readMasterParameters() const noexcept
@@ -240,6 +285,28 @@ namespace vm
         p.tremolo = pct (mov.tremolo);
         p.rateHz = mov.rate->load (std::memory_order_relaxed);
         p.style = (MovementStyle) juce::jlimit (0, 2, juce::roundToInt (mov.style->load (std::memory_order_relaxed)));
+        return p;
+    }
+
+    ParameterManager::SlotState ParameterManager::readSpaceSlot() const noexcept
+    {
+        return { spc.enable->load (std::memory_order_relaxed) >= 0.5f,
+                 spc.mix->load (std::memory_order_relaxed) / 100.0f };
+    }
+
+    SpaceParameters ParameterManager::readSpaceParameters() const noexcept
+    {
+        const auto pct = [] (const std::atomic<float>* a) { return a->load (std::memory_order_relaxed) / 100.0f; };
+
+        SpaceParameters p;
+        p.delay = pct (spc.delay);
+        p.time = pct (spc.time);
+        p.feedback = pct (spc.feedback);
+        p.sync = spc.sync->load (std::memory_order_relaxed) >= 0.5f;
+        p.mix = pct (spc.reverbMix);
+        p.decay = pct (spc.decay);
+        p.type = (ReverbType) juce::jlimit (0, 2, juce::roundToInt (spc.type->load (std::memory_order_relaxed)));
+        p.width = pct (spc.width);
         return p;
     }
 

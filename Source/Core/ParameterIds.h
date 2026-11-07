@@ -57,6 +57,18 @@ namespace vm::param
     inline constexpr const char* movRate           = "movRate";           // Hz (tremolo rate)
     inline constexpr const char* movStyle          = "movStyle";          // choice: Frozen/Drift/Cloud
 
+    // --- Module 4: SPACE (v1) ---
+    inline constexpr const char* spcEnable         = "spcEnable";         // bool
+    inline constexpr const char* spcMix            = "spcMix";            // percent (slot Dry/Wet)
+    inline constexpr const char* spcDelay          = "spcDelay";          // percent (delay amount)
+    inline constexpr const char* spcTime           = "spcTime";           // percent (free time / division)
+    inline constexpr const char* spcFeedback       = "spcFeedback";       // percent
+    inline constexpr const char* spcSync           = "spcSync";           // bool
+    inline constexpr const char* spcReverbMix      = "spcReverbMix";      // percent (reverb amount)
+    inline constexpr const char* spcDecay          = "spcDecay";          // percent
+    inline constexpr const char* spcType           = "spcType";           // choice: Room/Plate/Hall
+    inline constexpr const char* spcWidth          = "spcWidth";          // percent (stereo opening)
+
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;
 }

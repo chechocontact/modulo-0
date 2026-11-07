@@ -91,7 +91,7 @@ Source/
 │       ├── SaturationProcessor.* Tube / Tape / Console con ADAA
 │       ├── ToneProcessor.*      inclinación tonal bipolar
 │   │   └── ChorusProcessor.*    Classic / Dimension / Ensemble
-│   └── Movement/            Módulo 3
+│   ├── Movement/            Módulo 3
 │       ├── MovementProcessor.*  GranularEngine → Tremolo (siempre 100 % wet)
 │       ├── MovementParameters.h parámetros, rangos y configuración de cada Style
 │       ├── GrainBuffer.h        buffer circular estéreo (2 s, potencia de dos)
@@ -99,7 +99,12 @@ Source/
 │       ├── GrainVoice.h         un grano (32 voces fijas)
 │       ├── GrainGenerator.*     cuándo nace cada grano y cómo es, según el Style
 │       ├── GranularEngine.*     captura + voces + feedback
-│       └── TremoloProcessor.*   trémolo senoidal con fase estéreo
+│   │   └── TremoloProcessor.*   trémolo senoidal con fase estéreo
+│   └── Space/               Módulo 4
+│       ├── SpaceProcessor.*     Delay → Reverb, mezcla y Width
+│       ├── SpaceParameters.h    parámetros, divisiones de tempo y ajuste de cada tipo de reverb
+│       ├── DelayProcessor.*     delay estéreo con feedback cruzado y filtrado
+│       └── ReverbProcessor.*    red de retardos con realimentación (8 líneas), Room / Plate / Hall
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
 └── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
@@ -221,11 +226,40 @@ Más el **encendido** del slot (`movEnable`) y su **Dry/Wet** (`movMix`).
 - Sin latencia. Los cambios de parámetros se suavizan 20 ms.
 - **Valores por defecto:** Grain 40 %, Feedback 30 %, Tremolo 25 %, Rate 4 Hz, Style Cloud.
 
+## Módulo 4 — Space
+
+Flujo: `z = entrada + Delay · eco(entrada)` → `salida = z + Mix · reverb(z)`. La reverb va después del delay, así que los ecos también reciben reverb.
+
+| Control | ID | Qué hace |
+|---|---|---|
+| **Delay** | `spcDelay` | Cantidad de delay que se suma a la señal (0 = sin delay) |
+| **Time** | `spcTime` | Sync apagado: 20 ms a 1,5 s (exponencial). Sync encendido: elige la división musical |
+| **Feedback** | `spcFeedback` | Repeticiones (ganancia máxima 0,92; siempre decae) |
+| **Sync** | `spcSync` | Botón: el delay sigue el tempo del host |
+| **Mix** | `spcReverbMix` | Cantidad de reverb que se suma a la señal |
+| **Decay** | `spcDecay` | Duración de la cola (RT60); el rango depende del Type |
+| **Type** | `spcType` | **Room** (0,2–2,5 s), **Plate** (0,4–6 s), **Hall** (0,8–12 s) |
+| **Width** | `spcWidth` | Apertura estéreo: en el delay es el ping-pong (0 = mono, 100 % = los ecos rebotan entre izquierda y derecha); en la reverb escala el componente lateral (0 = mono) |
+
+Más el **encendido** del slot (`spcEnable`) y su **Dry/Wet** (`spcMix`). El ID `spcMix` es el Dry/Wet del slot; la cantidad de reverb es `spcReverbMix`.
+
+- **Sync:** con Sync encendido, Time recorre 8 divisiones: 1/16, 1/8T, 1/8, 1/4T, 1/8., 1/4, 1/4. y 1/2, calculadas con el BPM del host (120 BPM si el host no lo da). El texto del parámetro muestra los milisegundos y la división (`215 ms | 1/8`); la división es la que vale con Sync encendido. El retardo máximo es de 3 s: con tempos muy lentos se limita.
+- Los cambios de Time (y de tempo) **se deslizan** en 0,12 s, como una cinta: sin clicks, con un ligero cambio de tono.
+- Las repeticiones se vuelven más oscuras y delgadas a cada pasada (paso alto 120 Hz y paso bajo 5,5 kHz en el lazo) y el lazo está limitado con `tanh`.
+- **Reverb:** 8 líneas con mezcla Hadamard, difusión de entrada, pre-delay fijo por tipo (Room 4 ms, Plate 8 ms, Hall 30 ms), amortiguación de agudos y modulación lenta contra el sonido metálico. El nivel de la cola se mantiene casi constante al cambiar Decay.
+- Cambiar de **Type** hace un fundido de 50 ms entre motores. Un motor apagado no consume CPU.
+- Con Mix a 0 la reverb se vacía; al subirla de nuevo no vuelve una cola vieja.
+- Low Cut, High Cut, Duck y Pre-Delay no son controles: son valores fijos.
+- Sin latencia. Con Delay y Mix a 0 el módulo es transparente bit a bit.
+- **Valores por defecto:** Delay 25 %, Time 55 %, Feedback 35 %, Sync apagado, Mix 25 %, Decay 50 %, Type Hall, Width 80 %.
+
 ## Pruebas
 
 `ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
+
+`SpaceTests` (123 comprobaciones): transparencia con todo apagado, tiempo del delay medido (20 ms a 1,5 s), sincronización a varios tempos y divisiones, tempo cambiante, repeticiones de feedback que decaen, ping-pong, repeticiones más oscuras, cambios de tiempo sin clicks, **RT60 medido** (integral de Schroeder) en los tres tipos, nivel y Mix de la reverb, Width, cambio de Type sin clicks, estabilidad con Decay y Feedback al máximo durante 60 s, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, sin cola vieja, cero asignaciones y CPU (unos 110x tiempo real).
 
 `MovementTests` (70 comprobaciones): transparencia con Grain y Tremolo a 0, Grain creciente en los tres estilos, nivel normalizado, estilos distintos y Cloud ancho, Frozen sostiene el sonido tras cortar la entrada (Cloud no), Feedback alarga la cola y se mantiene acotado con entrada fuerte y 20 s, Tremolo (profundidad, velocidad y fase estéreo medidas), cambios de parámetros sin clicks, resultados idénticos con cualquier tamaño de bloque (1 a 512), frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, silencio, reinicio repetible, límite de voces, cero asignaciones y CPU (unos 330x tiempo real).
 
@@ -247,4 +281,5 @@ Más el **encendido** del slot (`movEnable`) y su **Dry/Wet** (`movMix`).
 - [ ] Color en FL Studio: comparar Tube / Tape / Console, mover Tone y Magic Chorus en estéreo y comprobar que cambiar de tipo no hace clicks.
 - [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl Amount/Drop, Degrade) y comprobar que el vinilo suena igual con Color activado o apagado y comprobar que el Dry/Wet y el encendido no hacen clicks.
 - [ ] Movement en FL Studio: probar los tres Style con material rítmico y sostenido, subir Feedback al máximo (debe decaer, sin chillidos ni saltos de volumen), mover Tremolo/Rate y comprobar que no hay clicks al cambiar de Style.
+- [ ] Space en FL Studio: activar Sync y comprobar que el delay sigue el tempo del proyecto (y los cambios de tempo), Feedback y Decay al máximo (deben decaer), cambiar Type en reproducción sin clicks y mover Width con material estéreo.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

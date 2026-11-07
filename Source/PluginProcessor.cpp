@@ -9,8 +9,8 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this)
 {
-    // Modules 1-3: Texture, Color and Movement are real. Space holds the
-    // transparent TestProcessor until it is implemented.
+    // All four effect modules are real. The transparent TestProcessor remains
+    // in the Core as a test fixture.
     using Slot = vm::AudioEngine::Slot;
     auto& engine = master.getEngine();
 
@@ -26,7 +26,9 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
     movementModule = movementProcessor.get();
     engine.setModule (Slot::movement, std::move (movementProcessor));
 
-    engine.setModule (Slot::space, std::make_unique<vm::TestProcessor>());
+    auto spaceProcessor = std::make_unique<vm::SpaceProcessor>();
+    spaceModule = spaceProcessor.get();
+    engine.setModule (Slot::space, std::move (spaceProcessor));
 }
 
 bool VintageMakerAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -88,6 +90,13 @@ void VintageMakerAudioProcessor::applyModuleParameters() noexcept
     movementSlot.setMix (movementState.mix);
 
     movementModule->setParameters (parameters.readMovementParameters());
+
+    const auto spaceState = parameters.readSpaceSlot();
+    auto& spaceSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::space);
+    spaceSlot.setEnabled (spaceState.enabled);
+    spaceSlot.setMix (spaceState.mix);
+
+    spaceModule->setParameters (parameters.readSpaceParameters());
 }
 
 void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buffer,
@@ -101,6 +110,13 @@ void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buff
         buffer.clear (ch, 0, numSamples);
 
     master.setParameters (p);
+
+    // Host tempo for the delay's Sync (the default tempo is used when the host gives none).
+    if (auto* hostPlayHead = getPlayHead())
+        if (auto position = hostPlayHead->getPosition())
+            if (auto bpm = position->getBpm())
+                spaceModule->setTempo (*bpm);
+
     applyModuleParameters();
 
     const int numChannels = juce::jmin (buffer.getNumChannels(), vm::maxChannels);
