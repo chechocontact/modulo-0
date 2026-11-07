@@ -79,9 +79,10 @@ jobs:
           ./pluginval/pluginval.exe --strictness-level 10 --skip-gui-tests --timeout-ms 600000 --validate "$plugin"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload VST3
+      - name: Upload VST3 (Release only)
+        if: matrix.config == 'Release'
         uses: actions/upload-artifact@v7
         with:
-          name: VintageMaker-VST3-windows-${{ matrix.config }}
-          path: build/VintageMaker_artefacts/${{ matrix.config }}/VST3/
+          name: VintageMaker-VST3-windows-Release
+          path: build/VintageMaker_artefacts/Release/VST3/
           if-no-files-found: error

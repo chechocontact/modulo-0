@@ -53,7 +53,7 @@ Solo pruebas del Core, sin JUCE: `cmake -S . -B build-core -DVM_BUILD_PLUGIN=OFF
 | Core tests (Linux, ASan/UBSan) | `ubuntu-latest` | Compila el Core con detectores de errores de memoria y comportamiento indefinido, y ejecuta `CoreTests` |
 | Windows x64 (Debug / Release) | `windows-latest` | Descarga JUCE, compila el VST3, ejecuta `CoreTests` y, en Release, **pluginval** con strictness 10; después sube el `.vst3` |
 
-El plugin compilado se descarga desde la ejecución, en *Actions → (ejecución) → Artifacts → `VintageMaker-VST3-windows-Release`*.
+El plugin compilado (solo Release; Debug se compila y prueba pero no se sube) se descarga en *Actions → (ejecución) → Artifacts → `VintageMaker-VST3-windows-Release`*.
 
 Subir el proyecto (el zip ya incluye el historial de Git):
 
