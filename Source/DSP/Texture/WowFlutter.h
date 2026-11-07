@@ -14,9 +14,9 @@ namespace vm
     // really arise). The delay is  A * (1 + m(t))  with m in [-1, 1], so with
     // zero depth the delay is exactly zero: no latency and bit-transparent.
     //
-    //   WOW     slow (0.1-2 Hz), up to 3 ms excursion. Shape: sine, triangle or
+    //   WOW     slow (0.1-2 Hz), up to 8 ms excursion. Shape: sine, triangle or
     //           random drift (filtered noise).
-    //   FLUTTER fast (4-15 Hz), up to 0.2 ms excursion. Variation adds
+    //   FLUTTER fast (4-15 Hz), up to 0.6 ms excursion. Variation adds
     //           randomness to both its rate and its amplitude.
     //
     // Call advance() once per sample frame, then process() for each channel.

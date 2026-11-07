@@ -9,7 +9,7 @@ namespace vm
     namespace
     {
         constexpr double twoPi = 6.283185307179586476925286766559;
-        constexpr double wowDepthRampSeconds = 0.4;
+        constexpr double wowDepthRampSeconds = 0.5;
         constexpr double flutterDepthRampSeconds = 0.1;
         constexpr double rateRampSeconds = 0.1;
         constexpr double shapeRampSeconds = 0.05;
@@ -28,7 +28,7 @@ namespace vm
         flutterExcursion = (float) (texture::flutterMaxExcursionSeconds * sampleRate);
 
         // Largest possible delay: 2*wow + 2*flutter + drop, with margin.
-        const int maxDelay = (int) std::ceil (sampleRate * 0.020);
+        const int maxDelay = (int) std::ceil (sampleRate * 0.040);
 
         for (auto& line : lines)
             line.prepare (maxDelay);

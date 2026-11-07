@@ -18,9 +18,9 @@ namespace vm
         inline constexpr float flutterRateMaxHz = 15.0f;
 
         // Delay excursion at depth = 1 (peak, each side of the mean delay).
-        // Pitch deviation = 2*pi*rate*excursion, e.g. wow 1 Hz -> +-1.9 %.
-        inline constexpr double wowMaxExcursionSeconds = 0.003;
-        inline constexpr double flutterMaxExcursionSeconds = 0.0002;
+        // Pitch deviation = 2*pi*rate*excursion, e.g. wow 1 Hz -> +-5 %, flutter 10 Hz -> +-3.8 %.
+        inline constexpr double wowMaxExcursionSeconds = 0.008;
+        inline constexpr double flutterMaxExcursionSeconds = 0.0006;
         inline constexpr double dropMaxExcursionSeconds = 0.0015;
     }
 

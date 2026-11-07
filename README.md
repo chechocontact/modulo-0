@@ -139,16 +139,16 @@ Flujo: `entrada → Wow + Flutter → Degrade → caída de nivel del Drop → +
 
 | Sección | Controles | Cómo funciona |
 |---|---|---|
-| **Wow** | Depth, Rate (0,1–2 Hz), Shape | Retardo variable de hasta ±3 ms. Shape: seno → triángulo → deriva aleatoria suave |
-| **Flutter** | Depth, Rate (4–15 Hz), Variation | Retardo variable de hasta ±0,2 ms. Variation aleatoriza velocidad y amplitud |
+| **Wow** | Depth, Rate (0,1–2 Hz), Shape | Retardo variable de hasta ±8 ms. Shape: seno → triángulo → deriva aleatoria suave |
+| **Flutter** | Depth, Rate (4–15 Hz), Variation | Retardo variable de hasta ±0,6 ms. Variation aleatoriza velocidad y amplitud |
 | **Vinyl** | Amount, Crackle Type, Drop | Hiss rosa + ráfagas de crackle (Normal / Dusty / Heavy). Drop: bajada ocasional de tono y nivel (cada ~30 s con Drop=0 % hasta ~5 s con 100 %) |
 | **Degrade** | Amount, Bandwidth, Smoothing | Suaviza transitorios → saturación suave → pasa-altos y pasa-bajos. Bandwidth: de 500 Hz–1,2 kHz (estrecho) a 40 Hz–12 kHz (ancho) |
 
 Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 
-- **Sin latencia.** El retardo es `profundidad × (1 + modulación)`, así que con Wow, Flutter y Drop a 0 la señal pasa bit a bit. El retardo medio crece con la profundidad (hasta unos 3 ms con Wow al máximo), lo que forma parte del efecto.
-- La desviación de tono depende de la velocidad: con Wow al 100 % y 1 Hz es de ±1,9 %.
-- Los cambios de profundidad son lentos a propósito (0,4 s en Wow): una rampa rápida del retardo doblaría el tono.
+- **Sin latencia.** El retardo es `profundidad × (1 + modulación)`, así que con Wow, Flutter y Drop a 0 la señal pasa bit a bit. El retardo medio crece con la profundidad (hasta unos 8 ms con Wow al máximo), lo que forma parte del efecto.
+- La desviación de tono depende de la velocidad: con Wow al 100 % y 1 Hz es de ±5 % (a 2 Hz, ±10 %); Flutter al 100 % y 10 Hz, ±3,8 %.
+- Los cambios de profundidad son lentos a propósito (0,5 s en Wow): una rampa rápida del retardo doblaría el tono.
 - El ruido es aditivo y no depende del nivel de entrada. Tiene semillas fijas, así que dos renders iguales dan el mismo resultado.
 - **Valores por defecto:** Wow 25 %, Flutter 15 %, Vinyl 20 %, Degrade 25 %. A diferencia del Módulo 0, el plugin **ya no es transparente** con los valores por defecto.
 - Un estado guardado antes del Módulo 1 se carga bien. Los parámetros de Texture que no estén en él conservan su valor actual.
@@ -169,7 +169,7 @@ Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 
 ## Pruebas
 
-`TextureTests` (93 comprobaciones): retardo Hermite, salida idéntica a la entrada con todo apagado, **desviación de tono medida por cruces por cero** (Wow ±1,9 %, Flutter ±1,26 %, mitad de profundidad = mitad de desviación), niveles de hiss y crackle por tipo, drop (caída de nivel y de tono), respuesta en frecuencia de Degrade, suavizado de transitorios, resultados idénticos con cualquier tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
+`TextureTests` (93 comprobaciones): retardo Hermite, salida idéntica a la entrada con todo apagado, **desviación de tono medida por cruces por cero** (Wow ±5 %, Flutter ±3,8 %, mitad de profundidad = mitad de desviación), niveles de hiss y crackle por tipo, drop (caída de nivel y de tono), respuesta en frecuencia de Degrade, suavizado de transitorios, resultados idénticos con cualquier tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `CoreTests` (248 comprobaciones) cubre:
 

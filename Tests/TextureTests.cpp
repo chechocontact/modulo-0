@@ -263,10 +263,10 @@ namespace
         fillSine (b, 1000.0, 48000.0, 0.5f);
         rig.run (b, 512);
 
-        // Expected: +-2*pi*rate*excursion = +-1.885 %
+        // Expected: +-2*pi*rate*excursion = +-5.03 %
         const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 5 * 48000);
-        CHECK_RANGE (d.high, 0.0170, 0.0205);
-        CHECK_RANGE (d.low, -0.0205, -0.0170);
+        CHECK_RANGE (d.high, 0.0455, 0.0545);
+        CHECK_RANGE (d.low, -0.0545, -0.0455);
 
         // Half the depth, half the deviation.
         p.wowDepth = 0.5f;
@@ -275,11 +275,11 @@ namespace
         fillSine (c, 1000.0, 48000.0, 0.5f);
         half.run (c, 512);
         const auto h = measureDeviation (c.data[0], 48000.0, 1000.0, 24000, 5 * 48000);
-        CHECK_RANGE (h.high, 0.0085, 0.0103);
+        CHECK_RANGE (h.high, 0.0228, 0.0272);
 
         // The two stereo channels move almost together (tape wow is correlated).
         const auto d1 = measureDeviation (b.data[1], 48000.0, 1000.0, 24000, 5 * 48000);
-        CHECK_RANGE (d1.high, 0.0170, 0.0205);
+        CHECK_RANGE (d1.high, 0.0455, 0.0545);
     }
 
     void testWowShapes()
@@ -300,8 +300,8 @@ namespace
             CHECK (allFinite (b));
             const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 8 * 48000);
             CHECK (d.cycles > 1000);
-            CHECK_RANGE (d.high, 0.002, 0.04);   // drift is random: only bounded
-            CHECK_RANGE (d.low, -0.04, -0.002);
+            CHECK_RANGE (d.high, 0.005, 0.08);   // drift is random: only bounded
+            CHECK_RANGE (d.low, -0.08, -0.005);
 
             if (shape > 0.0f)
                 CHECK (std::abs (d.high - previousHigh) > 1.0e-4); // shapes really differ
@@ -321,10 +321,10 @@ namespace
         fillSine (b, 1000.0, 48000.0, 0.5f);
         rig.run (b, 512);
 
-        // Expected: +-2*pi*10*0.2ms = +-1.257 %
+        // Expected: +-2*pi*10*0.6ms = +-3.77 %
         const auto d = measureDeviation (b.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
-        CHECK_RANGE (d.high, 0.0108, 0.0142);
-        CHECK_RANGE (d.low, -0.0142, -0.0108);
+        CHECK_RANGE (d.high, 0.0332, 0.0422);
+        CHECK_RANGE (d.low, -0.0422, -0.0332);
 
         // Variation changes the pattern but stays bounded.
         p.flutterVariation = 1.0f;
@@ -334,7 +334,7 @@ namespace
         varied.run (c, 512);
         CHECK (allFinite (c));
         const auto v = measureDeviation (c.data[0], 48000.0, 1000.0, 24000, 3 * 48000);
-        CHECK_RANGE (v.high, 0.005, 0.03);
+        CHECK_RANGE (v.high, 0.015, 0.09);
         CHECK (c.data[0] != b.data[0]);
     }
 
@@ -594,7 +594,7 @@ namespace
 
             // Wow depth in percent is independent of the sample rate.
             const auto d = measureDeviation (b.data[0], sr, 1000.0, (int) (0.5 * sr), (int) (4 * sr));
-            CHECK_RANGE (d.high, 0.0150, 0.0215);
+            CHECK_RANGE (d.high, 0.0400, 0.0570);
         }
     }
 
