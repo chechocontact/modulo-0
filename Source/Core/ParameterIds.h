@@ -48,6 +48,15 @@ namespace vm::param
     inline constexpr const char* colTone           = "colTone";           // -100..+100 percent
     inline constexpr const char* colMagicChorus    = "colChorusAmount";   // percent (ID kept from v0.3)
 
+    // --- Module 3: MOVEMENT (v1) ---
+    inline constexpr const char* movEnable         = "movEnable";         // bool
+    inline constexpr const char* movMix            = "movMix";            // percent
+    inline constexpr const char* movGrain          = "movGrain";          // percent
+    inline constexpr const char* movFeedback       = "movFeedback";       // percent
+    inline constexpr const char* movTremolo        = "movTremolo";        // percent (tremolo depth)
+    inline constexpr const char* movRate           = "movRate";           // Hz (tremolo rate)
+    inline constexpr const char* movStyle          = "movStyle";          // choice: Frozen/Drift/Cloud
+
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;
 }

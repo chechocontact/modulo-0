@@ -2,6 +2,7 @@
 
 #include "Core/MasterProcessor.h"
 #include "DSP/Color/ColorParameters.h"
+#include "DSP/Movement/MovementParameters.h"
 #include "DSP/Texture/TextureParameters.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -34,6 +35,8 @@ namespace vm
         TextureParameters readTextureParameters() const noexcept;
         SlotState readColorSlot() const noexcept;
         ColorParameters readColorParameters() const noexcept;
+        SlotState readMovementSlot() const noexcept;
+        MovementParameters readMovementParameters() const noexcept;
 
         // Message thread (or any thread the host chooses; uses the APVTS lock).
         void saveState (juce::MemoryBlock& destination);
@@ -72,5 +75,16 @@ namespace vm
             std::atomic<float>* tone = nullptr;
             std::atomic<float>* magicChorus = nullptr;
         } col;
+
+        struct MovementHandles
+        {
+            std::atomic<float>* enable = nullptr;
+            std::atomic<float>* mix = nullptr;
+            std::atomic<float>* grain = nullptr;
+            std::atomic<float>* feedback = nullptr;
+            std::atomic<float>* tremolo = nullptr;
+            std::atomic<float>* rate = nullptr;
+            std::atomic<float>* style = nullptr;
+        } mov;
     };
 }

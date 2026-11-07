@@ -88,6 +88,22 @@ namespace vm
 
             addPercent (layout, param::colMagicChorus, "Magic Chorus", d.magicChorus * 100.0f);
         }
+
+        void addMovementParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+        {
+            const MovementParameters d; // defaults live in one place: MovementParameters
+
+            layout.add (std::make_unique<juce::AudioParameterBool> (makeId (param::movEnable), "Movement On", true));
+            addPercent (layout, param::movMix, "Movement Dry/Wet", 100.0f);
+
+            addPercent (layout, param::movGrain, "Grain", d.grain * 100.0f);
+            addPercent (layout, param::movFeedback, "Feedback", d.feedback * 100.0f);
+            addPercent (layout, param::movTremolo, "Tremolo", d.tremolo * 100.0f);
+            addHz (layout, param::movRate, "Rate", movement::rateMinHz, movement::rateMaxHz, d.rateHz);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::movStyle), "Style",
+                juce::StringArray { "Frozen", "Drift", "Cloud" }, (int) d.style));
+        }
     }
 
     juce::AudioProcessorValueTreeState::ParameterLayout ParameterManager::createLayout()
@@ -118,6 +134,7 @@ namespace vm
 
         addTextureParameters (layout);
         addColorParameters (layout);
+        addMovementParameters (layout);
 
         return layout;
     }
@@ -147,6 +164,14 @@ namespace vm
         col.type = requireParameter (state, param::colType);
         col.tone = requireParameter (state, param::colTone);
         col.magicChorus = requireParameter (state, param::colMagicChorus);
+
+        mov.enable = requireParameter (state, param::movEnable);
+        mov.mix = requireParameter (state, param::movMix);
+        mov.grain = requireParameter (state, param::movGrain);
+        mov.feedback = requireParameter (state, param::movFeedback);
+        mov.tremolo = requireParameter (state, param::movTremolo);
+        mov.rate = requireParameter (state, param::movRate);
+        mov.style = requireParameter (state, param::movStyle);
     }
 
     MasterParameters ParameterManager::readMasterParameters() const noexcept
@@ -196,6 +221,25 @@ namespace vm
         p.type = (ColorType) juce::jlimit (0, 2, juce::roundToInt (col.type->load (std::memory_order_relaxed)));
         p.tone = pct (col.tone);
         p.magicChorus = pct (col.magicChorus);
+        return p;
+    }
+
+    ParameterManager::SlotState ParameterManager::readMovementSlot() const noexcept
+    {
+        return { mov.enable->load (std::memory_order_relaxed) >= 0.5f,
+                 mov.mix->load (std::memory_order_relaxed) / 100.0f };
+    }
+
+    MovementParameters ParameterManager::readMovementParameters() const noexcept
+    {
+        const auto pct = [] (const std::atomic<float>* a) { return a->load (std::memory_order_relaxed) / 100.0f; };
+
+        MovementParameters p;
+        p.grain = pct (mov.grain);
+        p.feedback = pct (mov.feedback);
+        p.tremolo = pct (mov.tremolo);
+        p.rateHz = mov.rate->load (std::memory_order_relaxed);
+        p.style = (MovementStyle) juce::jlimit (0, 2, juce::roundToInt (mov.style->load (std::memory_order_relaxed)));
         return p;
     }
 

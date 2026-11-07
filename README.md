@@ -85,12 +85,21 @@ Source/
 │   │   ├── WowFlutter.*         modulación de tono con línea de retardo
 │   │   ├── VinylDrop.h          el "drop" del vinilo (bajada de tono y nivel)
 │   │   └── DegradeProcessor.*   transitorios, saturación y ancho de banda
-│   └── Color/               Módulo 2
+│   ├── Color/               Módulo 2
 │       ├── ColorProcessor.*     Saturación → Tone → Magic Chorus (siempre 100 % wet)
 │       ├── ColorParameters.h    parámetros, rangos y valores por defecto
 │       ├── SaturationProcessor.* Tube / Tape / Console con ADAA
 │       ├── ToneProcessor.*      inclinación tonal bipolar
-│       └── ChorusProcessor.*    Classic / Dimension / Ensemble
+│   │   └── ChorusProcessor.*    Classic / Dimension / Ensemble
+│   └── Movement/            Módulo 3
+│       ├── MovementProcessor.*  GranularEngine → Tremolo (siempre 100 % wet)
+│       ├── MovementParameters.h parámetros, rangos y configuración de cada Style
+│       ├── GrainBuffer.h        buffer circular estéreo (2 s, potencia de dos)
+│       ├── GrainWindow.h        ventana Hann en tabla
+│       ├── GrainVoice.h         un grano (32 voces fijas)
+│       ├── GrainGenerator.*     cuándo nace cada grano y cómo es, según el Style
+│       ├── GranularEngine.*     captura + voces + feedback
+│       └── TremoloProcessor.*   trémolo senoidal con fase estéreo
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
 └── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
@@ -184,11 +193,41 @@ Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
 - **Valores por defecto:** Drive 25 % Tube, Tone 0, Magic Chorus 50 %. Con Drive, Tone y Magic Chorus a 0, el módulo es transparente bit a bit.
 - Los parámetros eliminados (Focus y los controles del chorus) se ignoran al cargar estados antiguos.
 
+## Módulo 3 — Movement
+
+Flujo: `entrada → motor granular (Grain, Feedback, Style) → Tremolo (Depth, Rate)`.
+
+| Control | ID | Qué hace |
+|---|---|---|
+| **Grain** | `movGrain` | Cantidad de señal granular: `salida = entrada·(1−g) + granos·g`. A 0 el módulo es transparente bit a bit |
+| **Feedback** | `movFeedback` | Realimenta la salida granular al buffer de captura (ganancia máxima 0,85, con `tanh`, siempre decae) |
+| **Tremolo** | `movTremolo` | Profundidad del trémolo (0 = apagado). La ganancia oscila entre 1 y `1 − profundidad` |
+| **Rate** | `movRate` | Velocidad del trémolo, 0,1–15 Hz |
+| **Style** | `movStyle` | **Frozen / Drift / Cloud** (ver abajo) |
+
+Más el **encendido** del slot (`movEnable`) y su **Dry/Wet** (`movMix`).
+
+| Style | Comportamiento |
+|---|---|
+| **Frozen** | La captura se detiene y los granos (220 ms, 14/s) repiten los últimos 0,4 s congelados, como un colchón sostenido. Con Frozen elegido **Feedback no actúa** (no se escribe nada en el buffer). Si se elige Frozen sin haber pasado antes audio por otro estilo, el buffer está vacío y no suena nada granular |
+| **Drift** | Granos de 160 ms, 18/s; el punto de lectura vaga lentamente por el pasado reciente (0,12–0,62 s), con micro-desafinación (±8 cents) |
+| **Cloud** | Granos de 100 ms, 32/s en posiciones aleatorias de hasta 1 s atrás, muy abiertos en estéreo; algunos granos suenan una octava arriba (12 %) o abajo (8 %) |
+
+- Size, Density, Pitch, Spread y Freeze **no son controles**: son valores fijos de cada Style (`MovementParameters.h`).
+- **32 voces fijas, sin reservas dinámicas.** Si todas están ocupadas, el grano nuevo se omite.
+- Los granos usan ventana Hann (sin clicks), interpolación lineal e índices con máscara, así que nunca leen fuera del buffer. El punto de lectura se mantiene siempre detrás del de escritura durante todo el grano.
+- Nivel normalizado por potencia: el nivel granular se mantiene cerca del de la entrada en los tres estilos.
+- Trémolo senoidal; en estéreo el canal derecho va un cuarto de ciclo detrás.
+- Sin latencia. Los cambios de parámetros se suavizan 20 ms.
+- **Valores por defecto:** Grain 40 %, Feedback 30 %, Tremolo 25 %, Rate 4 Hz, Style Cloud.
+
 ## Pruebas
 
 `ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
+
+`MovementTests` (70 comprobaciones): transparencia con Grain y Tremolo a 0, Grain creciente en los tres estilos, nivel normalizado, estilos distintos y Cloud ancho, Frozen sostiene el sonido tras cortar la entrada (Cloud no), Feedback alarga la cola y se mantiene acotado con entrada fuerte y 20 s, Tremolo (profundidad, velocidad y fase estéreo medidas), cambios de parámetros sin clicks, resultados idénticos con cualquier tamaño de bloque (1 a 512), frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, silencio, reinicio repetible, límite de voces, cero asignaciones y CPU (unos 330x tiempo real).
 
 `CoreTests` (264 comprobaciones) cubre, además, el ruido de vinilo (nivel, estéreo, independencia de la cadena, bloques, asignaciones):
 
@@ -207,4 +246,5 @@ Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
 - [ ] Carga en FL Studio 2026, audio entrante y saliente, automatización, bypass y guardado/carga de proyecto.
 - [ ] Color en FL Studio: comparar Tube / Tape / Console, mover Tone y Magic Chorus en estéreo y comprobar que cambiar de tipo no hace clicks.
 - [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl Amount/Drop, Degrade) y comprobar que el vinilo suena igual con Color activado o apagado y comprobar que el Dry/Wet y el encendido no hacen clicks.
+- [ ] Movement en FL Studio: probar los tres Style con material rítmico y sostenido, subir Feedback al máximo (debe decaer, sin chillidos ni saltos de volumen), mover Tremolo/Rate y comprobar que no hay clicks al cambiar de Style.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

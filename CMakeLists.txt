@@ -48,6 +48,18 @@ add_library(VintageCore STATIC
     Source/DSP/Color/ChorusProcessor.cpp
     Source/DSP/Color/ColorProcessor.h
     Source/DSP/Color/ColorProcessor.cpp
+    Source/DSP/Movement/MovementParameters.h
+    Source/DSP/Movement/GrainBuffer.h
+    Source/DSP/Movement/GrainWindow.h
+    Source/DSP/Movement/GrainVoice.h
+    Source/DSP/Movement/GrainGenerator.h
+    Source/DSP/Movement/GrainGenerator.cpp
+    Source/DSP/Movement/GranularEngine.h
+    Source/DSP/Movement/GranularEngine.cpp
+    Source/DSP/Movement/TremoloProcessor.h
+    Source/DSP/Movement/TremoloProcessor.cpp
+    Source/DSP/Movement/MovementProcessor.h
+    Source/DSP/Movement/MovementProcessor.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -70,7 +82,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests ColorTests)
+    foreach(test_name CoreTests TextureTests ColorTests MovementTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 
