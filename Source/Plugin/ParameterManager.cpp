@@ -185,6 +185,8 @@ namespace vm
         master->addChild (std::make_unique<juce::AudioParameterBool> (
             makeId (param::masterBypass), "Bypass", false));
 
+        addPercent (*master, param::magnitude, "Magnitude", 100.0f);
+
         auto textureGroup = makeGroup ("grpTexture", "Texture");
         addTextureParameters (*textureGroup);
         auto colorGroup = makeGroup ("grpColor", "Color");
@@ -210,6 +212,7 @@ namespace vm
         masterMix = requireParameter (state, param::masterMix);
         masterBypass = requireParameter (state, param::masterBypass);
         vinylAmount = requireParameter (state, param::vinylAmount);
+        magnitude = requireParameter (state, param::magnitude);
         bypassParameter = state.getParameter (param::masterBypass);
 
         tex.enable = requireParameter (state, param::texEnable);
@@ -263,6 +266,28 @@ namespace vm
         p.vinylAmount = vinylAmount->load (std::memory_order_relaxed) / 100.0f;
         p.bypass = masterBypass->load (std::memory_order_relaxed) >= 0.5f;
         return p;
+    }
+
+    float ParameterManager::readMagnitude() const noexcept
+    {
+        return magnitude->load (std::memory_order_relaxed) / 100.0f;
+    }
+
+    ChainParameters ParameterManager::readChainParameters() const noexcept
+    {
+        ChainParameters c;
+        c.master = readMasterParameters();
+        c.magnitude = readMagnitude();
+        c.textureSlot = readTextureSlot();
+        c.colorSlot = readColorSlot();
+        c.movementSlot = readMovementSlot();
+        c.spaceSlot = readSpaceSlot();
+        c.texture = readTextureParameters();
+        c.color = readColorParameters();
+        c.movement = readMovementParameters();
+        c.space = readSpaceParameters();
+        c.engine = readEngineParameters();
+        return c;
     }
 
     ParameterManager::SlotState ParameterManager::readTextureSlot() const noexcept

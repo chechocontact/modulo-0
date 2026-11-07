@@ -71,6 +71,11 @@ add_library(VintageCore STATIC
     Source/DSP/Engine/ModulationSource.h
     Source/DSP/Engine/VintageEngine.h
     Source/DSP/Engine/VintageEngine.cpp
+    Source/DSP/Engine/Magnitude.h
+    Source/Core/LevelMeter.h
+    Source/Chain/ChainParameters.h
+    Source/Chain/VintageChain.h
+    Source/Chain/VintageChain.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -93,7 +98,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests EngineTests)
+    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests EngineTests IntegrationTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 

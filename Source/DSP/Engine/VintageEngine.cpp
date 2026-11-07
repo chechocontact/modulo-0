@@ -11,6 +11,11 @@ namespace vm
 
         float clampTo (float v, float low, float high) noexcept { return v < low ? low : (v > high ? high : v); }
 
+        // The amount-type destinations (depths, noise, drive, grain) are only moved when
+        // the user has them on: the offset fades out as the value approaches 0, so a
+        // knob left at 0 stays at 0 and the engine never switches an effect on by itself.
+        float presence (float base) noexcept { return clamp01 (base * 10.0f); }
+
         // Per Character: speed multipliers of the three drifts, their weights and the jitter.
         struct CharacterShape
         {
@@ -131,20 +136,20 @@ namespace vm
 
     void VintageEngine::apply (TextureParameters& p) const noexcept
     {
-        p.wowDepth = clamp01 (p.wowDepth + offsets.wowDepth);
+        p.wowDepth = clamp01 (p.wowDepth + presence (p.wowDepth) * offsets.wowDepth);
         p.wowRate = clampTo (p.wowRate + offsets.wowRate, texture::wowRateMinHz, texture::wowRateMaxHz);
-        p.flutterDepth = clamp01 (p.flutterDepth + offsets.flutterDepth);
+        p.flutterDepth = clamp01 (p.flutterDepth + presence (p.flutterDepth) * offsets.flutterDepth);
         p.flutterRate = clampTo (p.flutterRate + offsets.flutterRate, texture::flutterRateMinHz, texture::flutterRateMaxHz);
     }
 
     void VintageEngine::apply (ColorParameters& p) const noexcept
     {
-        p.drive = clamp01 (p.drive + offsets.drive);
+        p.drive = clamp01 (p.drive + presence (p.drive) * offsets.drive);
     }
 
     void VintageEngine::apply (MovementParameters& p) const noexcept
     {
-        p.grain = clamp01 (p.grain + offsets.grain);
+        p.grain = clamp01 (p.grain + presence (p.grain) * offsets.grain);
         p.rateHz = clampTo (p.rateHz + offsets.tremoloRate, movement::rateMinHz, movement::rateMaxHz);
     }
 
@@ -155,6 +160,6 @@ namespace vm
 
     float VintageEngine::applyToVinylAmount (float amount) const noexcept
     {
-        return clamp01 (amount + offsets.vinylAmount);
+        return clamp01 (amount + presence (amount) * offsets.vinylAmount);
     }
 }

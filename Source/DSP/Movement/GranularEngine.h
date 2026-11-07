@@ -14,7 +14,7 @@ namespace vm
 {
     // Capture buffer + grain voices + feedback. In place, stereo or mono.
     //
-    //   out = in * (1 - grain) + grains * grain
+    //   out = in * cos (grain * pi/2) + grains * sin (grain * pi/2)    (equal power)
     //   buffer <- in + feedback * tanh (grains)       (capture stops in Frozen)
     //
     // With Grain at zero the output equals the input bit for bit.

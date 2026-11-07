@@ -22,6 +22,9 @@ namespace vm
     //   amount   = Flux * Depth
     //   offset_i = smooth (modulation_i * amount * range_i)
     //
+    // Amount destinations (depths, Vinyl Amount, Drive, Grain) are not moved while their
+    // value is 0, and the offset fades in from 0 to 10 %. Rates and Width always move.
+    //
     // Destinations: Wow Depth/Rate, Flutter Depth/Rate, Vinyl Amount, Drive, Grain,
     // Tremolo Rate and Width. Results are always clamped to the destination's range.
     class VintageEngine

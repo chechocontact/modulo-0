@@ -27,6 +27,9 @@ namespace vm::param
     inline constexpr float mixMaxPercent = 100.0f;
     inline constexpr float mixDefaultPercent = 100.0f;
 
+    // --- Global intensity (Module 6) ---
+    inline constexpr const char* magnitude    = "magnitude";    // percent
+
     // --- Vinyl noise (global: added at the very end of the plugin) ---
     inline constexpr const char* vinylAmount       = "texVinylAmount";    // percent (ID kept from v0.2)
 

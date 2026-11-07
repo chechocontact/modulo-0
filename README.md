@@ -73,6 +73,7 @@ Source/
 │   ├── SmoothedValue.h      rampas lineales de parámetros (anti-clicks)
 │   ├── DenormalGuard.h      FTZ/DAZ por ámbito
 │   ├── ParameterIds.h       IDs estables y rangos (compartidos con el plugin)
+│   ├── LevelMeter.h         medidores de pico y RMS (hilo de audio → interfaz, atómicos)
 │   ├── ModuleProcessor.h    contrato común de los 4 módulos DSP
 │   ├── ModuleSlot.*         bypass + dry/wet por módulo, sin clicks
 │   ├── AudioEngine.*        Input Gain → 4 slots en serie
@@ -108,14 +109,22 @@ Source/
 │   └── Engine/              Módulo 5
 │       ├── VintageEngine.*      calcula los desvíos y los suma a los parámetros
 │       ├── VintageEngineParameters.h  Flux, Rate, Depth, Character y alcance de cada destino
+│       ├── Magnitude.h          Magnitude: factor global sobre las cantidades de efecto
 │       └── ModulationSource.h   señal aleatoria suave (interpolación coseno)
+├── Chain/                 SIN JUCE — el plugin entero
+│   ├── VintageChain.*       cadena + Vintage Engine + Magnitude + medidores
+│   └── ChainParameters.h    todos los parámetros de un bloque, como valores simples
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
-└── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
+└── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado) sobre VintageChain
 Tests/
 ├── CoreTests.cpp            pruebas del Core (sin JUCE)
 ├── TextureTests.cpp         pruebas del Módulo 1 (sin JUCE)
-└── ColorTests.cpp           pruebas del Módulo 2 (sin JUCE)
+├── ColorTests.cpp           pruebas del Módulo 2 (sin JUCE)
+├── MovementTests.cpp        pruebas del Módulo 3 (sin JUCE)
+├── SpaceTests.cpp           pruebas del Módulo 4 (sin JUCE)
+├── EngineTests.cpp          pruebas del Módulo 5 (sin JUCE)
+└── IntegrationTests.cpp     los cinco módulos juntos, Magnitude y medidores (sin JUCE)
 ```
 
 **El Core no depende de JUCE.** Así, todo el DSP se compila y se prueba en segundos en cualquier plataforma, y el plugin solo traduce entre el host y el Core.
@@ -198,6 +207,7 @@ Más el **encendido** del slot (`colEnable`) y su **Dry/Wet** (`colMix`).
 
 - **Anti-aliasing:** ADAA de primer orden, sin latencia ni sobremuestreo (unos 9 dB menos de aliasing con Drive al máximo). El oversampling 2x/4x llega en el Módulo 9.
 - Cambiar el tipo de saturación hace un fundido de 10 ms, sin clicks.
+- La mezcla del coro es de potencia constante (coseno/seno), para que Magic Chorus no baje el nivel.
 - `ChorusProcessor` conserva los modos Classic/Dimension/Ensemble y sus parámetros completos para uso futuro; Color solo expone la perilla.
 - **Valores por defecto:** Drive 25 % Tube, Tone 0, Magic Chorus 50 %. Con Drive, Tone y Magic Chorus a 0, el módulo es transparente bit a bit.
 - Los parámetros eliminados (Focus y los controles del chorus) se ignoran al cargar estados antiguos.
@@ -208,7 +218,7 @@ Flujo: `entrada → motor granular (Grain, Feedback, Style) → Tremolo (Depth, 
 
 | Control | ID | Qué hace |
 |---|---|---|
-| **Grain** | `movGrain` | Cantidad de señal granular: `salida = entrada·(1−g) + granos·g`. A 0 el módulo es transparente bit a bit |
+| **Grain** | `movGrain` | Cantidad de señal granular: `salida = entrada·cos(g·π/2) + granos·sin(g·π/2)` (potencia constante: un fundido lineal restaba unos 3 dB en el centro). A 0 el módulo es transparente bit a bit |
 | **Feedback** | `movFeedback` | Realimenta la salida granular al buffer de captura (ganancia máxima 0,85, con `tanh`, siempre decae) |
 | **Tremolo** | `movTremolo` | Profundidad del trémolo (0 = apagado). La ganancia oscila entre 1 y `1 − profundidad` |
 | **Rate** | `movRate` | Velocidad del trémolo, 0,1–15 Hz |
@@ -284,11 +294,31 @@ El desvío máximo de cada destino es `Flux · Depth · alcance`:
 | Width (Space) | ±45 % |
 
 - Cada destino tiene su propia señal independiente (correlación entre destinos medida: 0,16 como máximo).
+- **Un valor a 0 se queda en 0.** Los destinos de cantidad (Wow Depth, Flutter Depth, Vinyl Amount, Drive, Grain) solo se mueven si están encendidos: el desvío se desvanece al acercarse a 0 y es completo a partir del 10 %. Así el motor nunca activa por sí solo un efecto que dejaste apagado. Rates y Width se mueven siempre.
 - Todo pasa por un suavizado de 60 ms: ni cambiar de Character ni mover Flux produce saltos.
 - Es determinista: con la misma semilla, el mismo resultado tras un `reset()`.
 - Las estadísticas (tamaño y velocidad de las variaciones) no dependen de la frecuencia de muestreo ni del tamaño de bloque.
 - Sin asignaciones de memoria. Coste despreciable (~0,005 % de un núcleo).
 - **Valores por defecto:** Flux 60 %, Rate 50 %, Depth 70 %, Character Organic. El plugin queda **vivo** de serie; para oírlo estático, Flux a 0.
+
+## Módulo 6 — Integración general
+
+`VintageChain` (sin JUCE) reúne todo: `medidor de entrada → Input Gain → Texture → Color → Movement → Space → Master Dry/Wet / Output Gain / Bypass → ruido de vinilo → medidor de salida`. `PluginProcessor` solo lee los parámetros del host, se los pasa y le añade el tempo. Las pruebas de integración usan esta misma clase, así que se prueba lo que corre en el plugin.
+
+Para cada módulo, los valores del host pasan por: **valor del host → desvío del Vintage Engine → Magnitude → módulo**. Magnitude va al final, así que a 0 nada de lo que añada el motor llega al sonido.
+
+| Control | ID | Qué hace |
+|---|---|---|
+| **Magnitude** | `magnitude` | Intensidad global, 0–100 % (por defecto 100 %). Multiplica las **cantidades** de efecto; no escribe en los parámetros del host, así que tus ajustes individuales quedan como estaban |
+
+Magnitude escala: Wow Depth, Flutter Depth, Vinyl Drop, Degrade, Vinyl Amount, Drive, Tone, Magic Chorus, Grain, Feedback (Movement), Tremolo, Delay y Mix de la reverb. **No** escala: velocidades, tipos, Time, Decay, Width, Sync, el encendido y el Dry/Wet de cada módulo, ni las ganancias y el Dry/Wet maestros. A 0 el plugin es transparente (salida idéntica a la entrada, también con el motor al máximo).
+
+**Medidores.** `getInputMeter()` y `getOutputMeter()` dan pico (caída de 0,5 s) y RMS (0,3 s) por canal, calculados muestra a muestra en el hilo de audio y publicados con atómicos; el resultado no depende del tamaño de bloque. Ignoran NaN/Inf. La interfaz del Módulo 7 los leerá.
+
+**Notas de integración**
+- Con los valores por defecto la salida queda a unos −0,3 dB de la entrada (señal tonal) y la suma mono conserva el 73 % del nivel estéreo: es un sonido muy ancho (correlación L/R casi 0), pero sin cancelaciones.
+- El Vintage Engine se actualiza una vez por bloque del host (con 60 ms de suavizado). Con el motor apagado, la salida es idéntica bit a bit para cualquier tamaño de bloque; con el motor encendido, es muy parecida pero no idéntica.
+- Tras `reset()` con el motor encendido, los módulos arrancan desde sus últimos valores, así que la repetición es muy parecida, no idéntica.
 
 ## Pruebas
 
@@ -296,7 +326,9 @@ El desvío máximo de cada destino es `Flux · Depth · alcance`:
 
 `TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
 
-`EngineTests` (153 comprobaciones): exactamente transparente con Flux o Depth a 0 o con el módulo apagado (sin salto al apagarlo) (también al volver a 0), desvíos acotados y en movimiento en los tres caracteres, proporcionales a Flux y a Depth, sin saltos (paso máximo por bloque, también al cambiar Character/Rate/Flux de golpe), determinista y repetible tras `reset()`, velocidad Slow < Organic < Random y creciente con Rate, destinos independientes, estadísticas iguales de 22,05 a 192 kHz y con bloques de 1 a 8192 muestras, recorte a los rangos con parámetros en los extremos, no toca los parámetros que no son destino, valores NaN/Inf, módulos reales alimentados durante 30 s sin salirse de rango, cero asignaciones y CPU.
+`IntegrationTests` (178 comprobaciones): ajustes neutros, bypass y Dry/Wet = 0 son un cable; Magnitude 0 es un cable con todo al máximo y el motor encendido; Magnitude 50 % equivale exactamente a poner a mano la mitad de cada cantidad (y no toca nada más); Magnitude NaN o fuera de rango; efecto creciente con Magnitude en siete efectos por separado; automatizar Magnitude sin clicks; el motor no enciende un efecto a 0; las 16 combinaciones de encendido de los módulos; encender y apagar módulos en marcha; bloques de 1 a 4096 (idénticos con el motor apagado); 22,05 a 192 kHz en mono y estéreo; nivel y fase con valores por defecto; medidores (pico, RMS, canales independientes, bloques, silencio, NaN); automatización aleatoria de todos los parámetros durante 40 s; 120 s con los ajustes más duros sin crecer ni producir NaN; reinicio; cero asignaciones; CPU de los cinco módulos (unos 35x tiempo real, 3 % de un núcleo).
+
+`EngineTests` (155 comprobaciones): exactamente transparente con Flux o Depth a 0 o con el módulo apagado (sin salto al apagarlo) (también al volver a 0), desvíos acotados y en movimiento en los tres caracteres, proporcionales a Flux y a Depth, sin saltos (paso máximo por bloque, también al cambiar Character/Rate/Flux de golpe), determinista y repetible tras `reset()`, velocidad Slow < Organic < Random y creciente con Rate, destinos independientes, estadísticas iguales de 22,05 a 192 kHz y con bloques de 1 a 8192 muestras, recorte a los rangos con parámetros en los extremos, no toca los parámetros que no son destino, valores NaN/Inf, módulos reales alimentados durante 30 s sin salirse de rango, cero asignaciones y CPU.
 
 `SpaceTests` (124 comprobaciones): transparencia con todo apagado, tiempo del delay medido (20 ms a 1,5 s), sincronización a varios tempos y divisiones, tempo cambiante, repeticiones de feedback que decaen, ping-pong, repeticiones más oscuras, cambios de tiempo sin clicks, **RT60 medido** (integral de Schroeder) en los tres tipos, nivel y Mix de la reverb, Width, cambio de Type sin clicks, estabilidad con Decay y Feedback al máximo durante 60 s, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, sin cola vieja, cero asignaciones y CPU (unos 110x tiempo real).
 
@@ -322,4 +354,5 @@ El desvío máximo de cada destino es `Flux · Depth · alcance`:
 - [ ] Movement en FL Studio: probar los tres Style con material rítmico y sostenido, subir Feedback al máximo (debe decaer, sin chillidos ni saltos de volumen), mover Tremolo/Rate y comprobar que no hay clicks al cambiar de Style.
 - [ ] Space en FL Studio: activar Sync y comprobar que el delay sigue el tempo del proyecto (y los cambios de tempo), Feedback y Decay al máximo (deben decaer), cambiar Type en reproducción sin clicks y mover Width con material estéreo.
 - [ ] Vintage Engine en FL Studio: con Flux a 0 el sonido debe ser idéntico al de antes; subir Flux/Depth y escuchar la deriva del wow, el flutter, el ruido y la saturación en los tres Character, sin saltos ni cambios bruscos de volumen; automatizar un parámetro destino (por ejemplo Drive) y comprobar que la automatización sigue mandando.
+- [ ] Magnitude en FL Studio: a 0 el sonido debe ser el original; moverla en reproducción no debe hacer clicks, y subirla debe aumentar de forma pareja todos los efectos. Los ajustes de cada módulo no deben cambiar al moverla.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

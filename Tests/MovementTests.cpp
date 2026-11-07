@@ -201,8 +201,13 @@ namespace
 
         auto difference = [&] (float grain, MovementStyle style)
         {
+            // Capture a second of sound first, so that Frozen has something to hold.
+            Rig rig (make (grain, 0.0f, 0.0f, 4.0f, MovementStyle::cloud));
+            Buffer warm = in;
+            rig.run (warm, 512);
+            rig.processor.setParameters (make (grain, 0.0f, 0.0f, 4.0f, style));
+
             Buffer b = in;
-            Rig rig (make (grain, 0.0f, 0.0f, 4.0f, style));
             rig.run (b, 512);
             CHECK (allFinite (b));
 

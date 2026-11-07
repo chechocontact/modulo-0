@@ -1,17 +1,12 @@
 #pragma once
 
-#include "Core/MasterProcessor.h"
-#include "DSP/Color/ColorProcessor.h"
-#include "DSP/Engine/VintageEngine.h"
-#include "DSP/Movement/MovementProcessor.h"
-#include "DSP/Space/SpaceProcessor.h"
-#include "DSP/Texture/TextureProcessor.h"
+#include "Chain/VintageChain.h"
 #include "Plugin/ParameterManager.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
 // Thin host adapter: buses, parameters and state on the JUCE side, all audio
-// work delegated to the JUCE-free vm::MasterProcessor.
+// work delegated to the JUCE-free vm::VintageChain.
 class VintageMakerAudioProcessor final : public juce::AudioProcessor
 {
 public:
@@ -52,17 +47,16 @@ public:
 
     vm::ParameterManager& getParameterManager() noexcept { return parameters; }
 
+    // Level meters for the interface (lock-free reads).
+    const vm::LevelMeter& getInputMeter() const noexcept { return chain.getInputMeter(); }
+    const vm::LevelMeter& getOutputMeter() const noexcept { return chain.getOutputMeter(); }
+
 private:
-    void processWithCore (juce::AudioBuffer<float>& buffer, const vm::MasterParameters& p) noexcept;
-    void applyModuleParameters() noexcept;
+    void processWithCore (juce::AudioBuffer<float>& buffer, bool forceBypass) noexcept;
+    vm::ChainParameters readParameters (bool forceBypass) noexcept;
 
     vm::ParameterManager parameters;
-    vm::MasterProcessor master;
-    vm::TextureProcessor* texture = nullptr; // owned by master's engine
-    vm::ColorProcessor* color = nullptr;     // owned by master's engine
-    vm::MovementProcessor* movementModule = nullptr; // owned by master's engine
-    vm::SpaceProcessor* spaceModule = nullptr;       // owned by master's engine
-    vm::VintageEngine vintageEngine;                 // organic offsets on top of the host's parameters
+    vm::VintageChain chain;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VintageMakerAudioProcessor)
 };

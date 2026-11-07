@@ -65,6 +65,7 @@ namespace vm
         float delaySamples[numModes][maxChannels][maxVoices] {};
 
         float mixNow = 0.0f;
+        float dryGain = 1.0f, wetGain = 0.0f;
         float fadeNow = 1.0f;
         bool fading = false;
         bool active = false;

@@ -124,9 +124,15 @@ namespace vm
 
             if (active)
             {
-                left[i] = inL * (1.0f - grain) + wetL * grain;
+                // Equal-power crossfade (the grains are not correlated with the input, so a
+                // linear fade would dip about 3 dB in the middle). Grain 0 is exactly the input.
+                constexpr float halfPi = 1.57079632679f;
+                const float dryGain = std::cos (grain * halfPi);
+                const float wetGain = std::sin (grain * halfPi);
+
+                left[i] = inL * dryGain + wetL * wetGain;
                 if (right != nullptr)
-                    right[i] = inR * (1.0f - grain) + wetR * grain;
+                    right[i] = inR * dryGain + wetR * wetGain;
             }
 
             if (capture)

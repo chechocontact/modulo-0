@@ -115,6 +115,12 @@ namespace vm
         // The effect fades out smoothly as Amount approaches 0.
         mixNow = m * std::min (1.0f, a * 20.0f);
 
+        // Equal-power crossfade: the dry and wet signals are not correlated, so a linear
+        // fade would dip about 3 dB in the middle. At mixNow = 0 this is exactly the input.
+        constexpr float halfPi = 1.57079632679f;
+        dryGain = std::cos (mixNow * halfPi);
+        wetGain = std::sin (mixNow * halfPi);
+
         const float depthNow = d * a;
         const int modes[2] = { currentMode, previousMode };
         const int count = fading ? 2 : 1;
@@ -164,6 +170,6 @@ namespace vm
             wet = old + (wet - old) * fadeNow;
         }
 
-        return input + mixNow * (wet - input);
+        return input * dryGain + wet * wetGain;
     }
 }

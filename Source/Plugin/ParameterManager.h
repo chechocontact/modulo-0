@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Chain/ChainParameters.h"
 #include "Core/MasterProcessor.h"
 #include "DSP/Color/ColorParameters.h"
 #include "DSP/Movement/MovementParameters.h"
@@ -27,11 +28,11 @@ namespace vm
         // Audio thread. Lock-free: reads cached std::atomic<float> pointers.
         MasterParameters readMasterParameters() const noexcept;
 
-        struct SlotState
-        {
-            bool enabled = true;
-            float mix = 1.0f; // 0..1
-        };
+        using SlotState = SlotSettings;
+
+        // Everything for one block (the host tempo is added by the caller).
+        ChainParameters readChainParameters() const noexcept;
+        float readMagnitude() const noexcept;
 
         SlotState readTextureSlot() const noexcept;
         TextureParameters readTextureParameters() const noexcept;
@@ -57,6 +58,7 @@ namespace vm
         std::atomic<float>* masterMix = nullptr;
         std::atomic<float>* masterBypass = nullptr;
         std::atomic<float>* vinylAmount = nullptr;
+        std::atomic<float>* magnitude = nullptr;
         juce::AudioProcessorParameter* bypassParameter = nullptr;
 
         struct TextureHandles

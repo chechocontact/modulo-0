@@ -479,6 +479,30 @@ namespace
         }
         CHECK (ok);
 
+        // A knob left at 0 stays at 0 (the engine never switches an effect on by itself).
+        {
+            TextureParameters z; z.wowDepth = 0.0f; z.flutterDepth = 0.0f;
+            ColorParameters zc; zc.drive = 0.0f;
+            MovementParameters zm; zm.grain = 0.0f;
+            bool stayed = true;
+            for (int i = 0; i < 4000; ++i)
+            {
+                e.advance (256);
+                auto t2 = z; auto c2 = zc; auto m2 = zm;
+                e.apply (t2); e.apply (c2); e.apply (m2);
+                stayed = stayed && t2.wowDepth == 0.0f && t2.flutterDepth == 0.0f && c2.drive == 0.0f
+                         && m2.grain == 0.0f && e.applyToVinylAmount (0.0f) == 0.0f;
+            }
+            CHECK (stayed);
+
+            // And it fades in smoothly: a small value moves less than a large one.
+            e.advance (256);
+            ColorParameters lo; lo.drive = 0.02f;
+            ColorParameters hi; hi.drive = 0.5f;
+            e.apply (lo); e.apply (hi);
+            CHECK (std::abs (lo.drive - 0.02f) <= 0.2f * std::abs (e.getOffsets().drive) + 1.0e-6f);
+        }
+
         // It does not touch anything it does not own.
         TextureParameters t; t.vinylDrop = 0.7f; t.degrade = 0.4f;
         MovementParameters m; m.feedback = 0.55f; m.tremolo = 0.35f; m.style = MovementStyle::frozen;
