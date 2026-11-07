@@ -50,9 +50,15 @@ void VintageMakerAudioProcessor::prepareToPlay (double sampleRate, int samplesPe
     spec.numChannels = juce::jlimit (1, vm::maxChannels, getTotalNumOutputChannels());
 
     master.prepare (spec);
+    vintageEngine.prepare (sampleRate);
 
     // Start from the current parameter values, without ramping from defaults.
-    master.setParameters (parameters.readMasterParameters());
+    vintageEngine.setParameters (parameters.readEngineParameters());
+    vintageEngine.reset();
+
+    auto initial = parameters.readMasterParameters();
+    initial.vinylAmount = vintageEngine.applyToVinylAmount (initial.vinylAmount);
+    master.setParameters (initial);
     applyModuleParameters();
     master.reset();
 
@@ -66,6 +72,7 @@ void VintageMakerAudioProcessor::releaseResources()
 void VintageMakerAudioProcessor::reset()
 {
     master.reset();
+    vintageEngine.reset();
 }
 
 void VintageMakerAudioProcessor::applyModuleParameters() noexcept
@@ -75,28 +82,36 @@ void VintageMakerAudioProcessor::applyModuleParameters() noexcept
     textureSlot.setEnabled (slot.enabled);
     textureSlot.setMix (slot.mix);
 
-    texture->setParameters (parameters.readTextureParameters());
+    auto textureParameters = parameters.readTextureParameters();
+    vintageEngine.apply (textureParameters);
+    texture->setParameters (textureParameters);
 
     const auto colorState = parameters.readColorSlot();
     auto& colorSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::color);
     colorSlot.setEnabled (colorState.enabled);
     colorSlot.setMix (colorState.mix);
 
-    color->setParameters (parameters.readColorParameters());
+    auto colorParameters = parameters.readColorParameters();
+    vintageEngine.apply (colorParameters);
+    color->setParameters (colorParameters);
 
     const auto movementState = parameters.readMovementSlot();
     auto& movementSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::movement);
     movementSlot.setEnabled (movementState.enabled);
     movementSlot.setMix (movementState.mix);
 
-    movementModule->setParameters (parameters.readMovementParameters());
+    auto movementParameters = parameters.readMovementParameters();
+    vintageEngine.apply (movementParameters);
+    movementModule->setParameters (movementParameters);
 
     const auto spaceState = parameters.readSpaceSlot();
     auto& spaceSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::space);
     spaceSlot.setEnabled (spaceState.enabled);
     spaceSlot.setMix (spaceState.mix);
 
-    spaceModule->setParameters (parameters.readSpaceParameters());
+    auto spaceParameters = parameters.readSpaceParameters();
+    vintageEngine.apply (spaceParameters);
+    spaceModule->setParameters (spaceParameters);
 }
 
 void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buffer,
@@ -109,7 +124,13 @@ void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buff
     for (int ch = numInputs; ch < numOutputs; ++ch)
         buffer.clear (ch, 0, numSamples);
 
-    master.setParameters (p);
+    // Organic drifts (Vintage Engine) go on top of the host's values for this block.
+    vintageEngine.setParameters (parameters.readEngineParameters());
+    vintageEngine.advance (numSamples);
+
+    auto modulated = p;
+    modulated.vinylAmount = vintageEngine.applyToVinylAmount (p.vinylAmount);
+    master.setParameters (modulated);
 
     // Host tempo for the delay's Sync (the default tempo is used when the host gives none).
     if (auto* hostPlayHead = getPlayHead())

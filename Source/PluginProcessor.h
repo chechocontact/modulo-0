@@ -2,6 +2,7 @@
 
 #include "Core/MasterProcessor.h"
 #include "DSP/Color/ColorProcessor.h"
+#include "DSP/Engine/VintageEngine.h"
 #include "DSP/Movement/MovementProcessor.h"
 #include "DSP/Space/SpaceProcessor.h"
 #include "DSP/Texture/TextureProcessor.h"
@@ -61,6 +62,7 @@ private:
     vm::ColorProcessor* color = nullptr;     // owned by master's engine
     vm::MovementProcessor* movementModule = nullptr; // owned by master's engine
     vm::SpaceProcessor* spaceModule = nullptr;       // owned by master's engine
+    vm::VintageEngine vintageEngine;                 // organic offsets on top of the host's parameters
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VintageMakerAudioProcessor)
 };

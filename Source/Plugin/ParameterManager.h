@@ -3,6 +3,7 @@
 #include "Core/MasterProcessor.h"
 #include "DSP/Color/ColorParameters.h"
 #include "DSP/Movement/MovementParameters.h"
+#include "DSP/Engine/VintageEngineParameters.h"
 #include "DSP/Space/SpaceParameters.h"
 #include "DSP/Texture/TextureParameters.h"
 
@@ -40,6 +41,7 @@ namespace vm
         MovementParameters readMovementParameters() const noexcept;
         SlotState readSpaceSlot() const noexcept;
         SpaceParameters readSpaceParameters() const noexcept;
+        VintageEngineParameters readEngineParameters() const noexcept;
 
         // Message thread (or any thread the host chooses; uses the APVTS lock).
         void saveState (juce::MemoryBlock& destination);
@@ -103,5 +105,13 @@ namespace vm
             std::atomic<float>* type = nullptr;
             std::atomic<float>* width = nullptr;
         } spc;
+
+        struct EngineHandles
+        {
+            std::atomic<float>* flux = nullptr;
+            std::atomic<float>* rate = nullptr;
+            std::atomic<float>* depth = nullptr;
+            std::atomic<float>* character = nullptr;
+        } eng;
     };
 }

@@ -69,6 +69,12 @@ namespace vm::param
     inline constexpr const char* spcType           = "spcType";           // choice: Room/Plate/Hall
     inline constexpr const char* spcWidth          = "spcWidth";          // percent (stereo opening)
 
+    // --- Module 5: VINTAGE ENGINE (v1) ---
+    inline constexpr const char* engFlux           = "engFlux";           // percent
+    inline constexpr const char* engRate           = "engRate";           // percent
+    inline constexpr const char* engDepth          = "engDepth";          // percent
+    inline constexpr const char* engCharacter      = "engCharacter";      // choice: Slow/Organic/Random
+
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;
 }

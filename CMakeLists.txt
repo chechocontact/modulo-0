@@ -67,6 +67,10 @@ add_library(VintageCore STATIC
     Source/DSP/Space/ReverbProcessor.cpp
     Source/DSP/Space/SpaceProcessor.h
     Source/DSP/Space/SpaceProcessor.cpp
+    Source/DSP/Engine/VintageEngineParameters.h
+    Source/DSP/Engine/ModulationSource.h
+    Source/DSP/Engine/VintageEngine.h
+    Source/DSP/Engine/VintageEngine.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -89,7 +93,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests)
+    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests EngineTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 

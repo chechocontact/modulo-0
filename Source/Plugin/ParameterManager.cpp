@@ -137,6 +137,18 @@ namespace vm
 
             addPercent (layout, param::spcWidth, "Width", d.width * 100.0f);
         }
+
+        void addEngineParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+        {
+            const VintageEngineParameters d; // defaults live in one place: VintageEngineParameters
+
+            addPercent (layout, param::engFlux, "Flux", d.flux * 100.0f);
+            addPercent (layout, param::engRate, "Engine Rate", d.rate * 100.0f);
+            addPercent (layout, param::engDepth, "Engine Depth", d.depth * 100.0f);
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::engCharacter), "Character",
+                juce::StringArray { "Slow", "Organic", "Random" }, (int) d.character));
+        }
     }
 
     juce::AudioProcessorValueTreeState::ParameterLayout ParameterManager::createLayout()
@@ -169,6 +181,7 @@ namespace vm
         addColorParameters (layout);
         addMovementParameters (layout);
         addSpaceParameters (layout);
+        addEngineParameters (layout);
 
         return layout;
     }
@@ -217,6 +230,11 @@ namespace vm
         spc.decay = requireParameter (state, param::spcDecay);
         spc.type = requireParameter (state, param::spcType);
         spc.width = requireParameter (state, param::spcWidth);
+
+        eng.flux = requireParameter (state, param::engFlux);
+        eng.rate = requireParameter (state, param::engRate);
+        eng.depth = requireParameter (state, param::engDepth);
+        eng.character = requireParameter (state, param::engCharacter);
     }
 
     MasterParameters ParameterManager::readMasterParameters() const noexcept
@@ -307,6 +325,18 @@ namespace vm
         p.decay = pct (spc.decay);
         p.type = (ReverbType) juce::jlimit (0, 2, juce::roundToInt (spc.type->load (std::memory_order_relaxed)));
         p.width = pct (spc.width);
+        return p;
+    }
+
+    VintageEngineParameters ParameterManager::readEngineParameters() const noexcept
+    {
+        const auto pct = [] (const std::atomic<float>* a) { return a->load (std::memory_order_relaxed) / 100.0f; };
+
+        VintageEngineParameters p;
+        p.flux = pct (eng.flux);
+        p.rate = pct (eng.rate);
+        p.depth = pct (eng.depth);
+        p.character = (EngineCharacter) juce::jlimit (0, 2, juce::roundToInt (eng.character->load (std::memory_order_relaxed)));
         return p;
     }
 

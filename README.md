@@ -100,11 +100,15 @@ Source/
 │       ├── GrainGenerator.*     cuándo nace cada grano y cómo es, según el Style
 │       ├── GranularEngine.*     captura + voces + feedback
 │   │   └── TremoloProcessor.*   trémolo senoidal con fase estéreo
-│   └── Space/               Módulo 4
+│   ├── Space/               Módulo 4
 │       ├── SpaceProcessor.*     Delay → Reverb, mezcla y Width
 │       ├── SpaceParameters.h    parámetros, divisiones de tempo y ajuste de cada tipo de reverb
 │       ├── DelayProcessor.*     delay estéreo con feedback cruzado y filtrado
-│       └── ReverbProcessor.*    red de retardos con realimentación (8 líneas), Room / Plate / Hall
+│   │   └── ReverbProcessor.*    red de retardos con realimentación (8 líneas), Room / Plate / Hall
+│   └── Engine/              Módulo 5
+│       ├── VintageEngine.*      calcula los desvíos y los suma a los parámetros
+│       ├── VintageEngineParameters.h  Flux, Rate, Depth, Character y alcance de cada destino
+│       └── ModulationSource.h   señal aleatoria suave (interpolación coseno)
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
 └── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
@@ -253,13 +257,45 @@ Más el **encendido** del slot (`spcEnable`) y su **Dry/Wet** (`spcMix`). El ID 
 - Sin latencia. Con Delay y Mix a 0 el módulo es transparente bit a bit.
 - **Valores por defecto:** Delay 25 %, Time 55 %, Feedback 35 %, Sync apagado, Mix 25 %, Decay 50 %, Type Hall, Width 80 %.
 
+## Módulo 5 — Vintage Engine
+
+No es un módulo de audio: genera variaciones lentas y suaves y las **suma como pequeños desvíos** a los parámetros que fijaron el usuario o el host, justo antes de entregarlos al DSP de cada módulo. **Nunca escribe en los parámetros del host**, así que la automatización y los presets no se tocan (`PluginProcessor` lee el valor del host, el motor le suma su desvío y el resultado se recorta al rango válido).
+
+| Control | ID | Qué hace |
+|---|---|---|
+| **Flux** | `engFlux` | Intensidad de la aleatoriedad. A 0 el motor está apagado y todos los parámetros pasan sin cambios |
+| **Rate** | `engRate` | Velocidad de la variación (0,02–0,5 Hz de base, exponencial) |
+| **Depth** | `engDepth` | Tamaño del desvío en cada destino |
+| **Character** | `engCharacter` | **Slow:** deriva muy lenta. **Organic:** tres velocidades mezcladas (×1, ×2,3, ×5,1). **Random:** más rápido e irregular (×3 y ×5,3 con intervalos variables) |
+
+El desvío máximo de cada destino es `Flux · Depth · alcance`:
+
+| Destino | Alcance (a Flux = Depth = 100 %) |
+|---|---|
+| Wow Depth / Wow Rate | ±20 % / ±0,35 Hz |
+| Flutter Depth / Flutter Rate | ±15 % / ±3 Hz |
+| Vinyl Amount | ±10 % |
+| Drive (Color) | ±15 % |
+| Grain (Movement) | ±15 % |
+| Tremolo Rate (Movement) | ±2 Hz |
+| Width (Space) | ±20 % |
+
+- Cada destino tiene su propia señal independiente (correlación entre destinos medida: 0,16 como máximo).
+- Todo pasa por un suavizado de 80 ms: ni cambiar de Character ni mover Flux produce saltos.
+- Es determinista: con la misma semilla, el mismo resultado tras un `reset()`.
+- Las estadísticas (tamaño y velocidad de las variaciones) no dependen de la frecuencia de muestreo ni del tamaño de bloque.
+- Sin asignaciones de memoria. Coste despreciable (~0,005 % de un núcleo).
+- **Valores por defecto:** Flux 40 %, Rate 30 %, Depth 50 %, Character Organic. El plugin queda **vivo** de serie; para oírlo estático, Flux a 0.
+
 ## Pruebas
 
 `ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `TextureTests` (67 comprobaciones): retardo Hermite, transparencia con todo apagado, **desviación de tono medida por cruces por cero**, drop, respuesta de la perilla Degrade, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, cero asignaciones y CPU.
 
-`SpaceTests` (123 comprobaciones): transparencia con todo apagado, tiempo del delay medido (20 ms a 1,5 s), sincronización a varios tempos y divisiones, tempo cambiante, repeticiones de feedback que decaen, ping-pong, repeticiones más oscuras, cambios de tiempo sin clicks, **RT60 medido** (integral de Schroeder) en los tres tipos, nivel y Mix de la reverb, Width, cambio de Type sin clicks, estabilidad con Decay y Feedback al máximo durante 60 s, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, sin cola vieja, cero asignaciones y CPU (unos 110x tiempo real).
+`EngineTests` (148 comprobaciones): exactamente transparente con Flux o Depth a 0 (también al volver a 0), desvíos acotados y en movimiento en los tres caracteres, proporcionales a Flux y a Depth, sin saltos (paso máximo por bloque, también al cambiar Character/Rate/Flux de golpe), determinista y repetible tras `reset()`, velocidad Slow < Organic < Random y creciente con Rate, destinos independientes, estadísticas iguales de 22,05 a 192 kHz y con bloques de 1 a 8192 muestras, recorte a los rangos con parámetros en los extremos, no toca los parámetros que no son destino, valores NaN/Inf, módulos reales alimentados durante 30 s sin salirse de rango, cero asignaciones y CPU.
+
+`SpaceTests` (124 comprobaciones): transparencia con todo apagado, tiempo del delay medido (20 ms a 1,5 s), sincronización a varios tempos y divisiones, tempo cambiante, repeticiones de feedback que decaen, ping-pong, repeticiones más oscuras, cambios de tiempo sin clicks, **RT60 medido** (integral de Schroeder) en los tres tipos, nivel y Mix de la reverb, Width, cambio de Type sin clicks, estabilidad con Decay y Feedback al máximo durante 60 s, tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio, sin cola vieja, cero asignaciones y CPU (unos 110x tiempo real).
 
 `MovementTests` (70 comprobaciones): transparencia con Grain y Tremolo a 0, Grain creciente en los tres estilos, nivel normalizado, estilos distintos y Cloud ancho, Frozen sostiene el sonido tras cortar la entrada (Cloud no), Feedback alarga la cola y se mantiene acotado con entrada fuerte y 20 s, Tremolo (profundidad, velocidad y fase estéreo medidas), cambios de parámetros sin clicks, resultados idénticos con cualquier tamaño de bloque (1 a 512), frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, silencio, reinicio repetible, límite de voces, cero asignaciones y CPU (unos 330x tiempo real).
 
@@ -282,4 +318,5 @@ Más el **encendido** del slot (`spcEnable`) y su **Dry/Wet** (`spcMix`). El ID 
 - [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl Amount/Drop, Degrade) y comprobar que el vinilo suena igual con Color activado o apagado y comprobar que el Dry/Wet y el encendido no hacen clicks.
 - [ ] Movement en FL Studio: probar los tres Style con material rítmico y sostenido, subir Feedback al máximo (debe decaer, sin chillidos ni saltos de volumen), mover Tremolo/Rate y comprobar que no hay clicks al cambiar de Style.
 - [ ] Space en FL Studio: activar Sync y comprobar que el delay sigue el tempo del proyecto (y los cambios de tempo), Feedback y Decay al máximo (deben decaer), cambiar Type en reproducción sin clicks y mover Width con material estéreo.
+- [ ] Vintage Engine en FL Studio: con Flux a 0 el sonido debe ser idéntico al de antes; subir Flux/Depth y escuchar la deriva del wow, el flutter, el ruido y la saturación en los tres Character, sin saltos ni cambios bruscos de volumen; automatizar un parámetro destino (por ejemplo Drive) y comprobar que la automatización sigue mandando.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.
