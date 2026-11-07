@@ -27,6 +27,22 @@ namespace vm::param
     inline constexpr float mixMaxPercent = 100.0f;
     inline constexpr float mixDefaultPercent = 100.0f;
 
+    // --- Module 1: TEXTURE (v1) ---
+    inline constexpr const char* texEnable           = "texEnable";           // bool
+    inline constexpr const char* texMix              = "texMix";              // percent
+    inline constexpr const char* texWowDepth         = "texWowDepth";         // percent
+    inline constexpr const char* texWowRate          = "texWowRate";          // Hz
+    inline constexpr const char* texWowShape         = "texWowShape";         // percent
+    inline constexpr const char* texFlutterDepth     = "texFlutterDepth";     // percent
+    inline constexpr const char* texFlutterRate      = "texFlutterRate";      // Hz
+    inline constexpr const char* texFlutterVariation = "texFlutterVariation"; // percent
+    inline constexpr const char* texVinylAmount      = "texVinylAmount";      // percent
+    inline constexpr const char* texCrackleType      = "texCrackleType";      // choice: Normal/Dusty/Heavy
+    inline constexpr const char* texVinylDrop        = "texVinylDrop";        // percent
+    inline constexpr const char* texDegradeAmount    = "texDegradeAmount";    // percent
+    inline constexpr const char* texDegradeBandwidth = "texDegradeBandwidth"; // percent
+    inline constexpr const char* texDegradeSmoothing = "texDegradeSmoothing"; // percent
+
     // Ramp time for gain/mix/bypass changes.
     inline constexpr double smoothingSeconds = 0.02;
 }

@@ -10,8 +10,8 @@ Cadena: `INPUT → TEXTURE → COLOR → MOVEMENT → SPACE → OUTPUT`
 
 | Módulo | Estado |
 |---|---|
-| 0 — Core y fundamentos | **Implementado.** Core probado en Linux; falta validarlo en Windows y FL Studio |
-| 1 — Texture | Pendiente |
+| 0 — Core y fundamentos | **Validado** (Windows + FL Studio) |
+| 1 — Texture | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
 | 2 — Color | Pendiente |
 | 3 — Movement | Pendiente |
 | 4 — Space | Pendiente |
@@ -77,12 +77,21 @@ Source/
 │   ├── AudioEngine.*        Input Gain → 4 slots en serie
 │   └── MasterProcessor.*    Master Dry/Wet, Output Gain, Bypass, troceo de bloques
 ├── DSP/
-│   └── Test/TestProcessor.* procesador de prueba (Módulo 0)
+│   ├── Test/TestProcessor.* procesador transparente (slots aún sin módulo real)
+│   └── Texture/             Módulo 1
+│       ├── TextureProcessor.*   orquesta los componentes (siempre 100 % wet)
+│       ├── TextureParameters.h  parámetros, rangos y valores por defecto
+│       ├── WowFlutter.*         modulación de tono con línea de retardo
+│       ├── DelayLine.h          retardo con interpolación Hermite
+│       ├── NoiseGenerator.h     ruido blanco/rosa determinista
+│       ├── VinylProcessor.*     hiss, crackle y "drop"
+│       └── DegradeProcessor.*   transitorios, saturación y ancho de banda
 ├── Plugin/
 │   └── ParameterManager.*   APVTS ↔ structs del Core, estado versionado
 └── PluginProcessor.*        adaptador JUCE fino (buses, parámetros, estado)
 Tests/
-└── CoreTests.cpp            pruebas de consola sin JUCE
+├── CoreTests.cpp            pruebas del Core (sin JUCE)
+└── TextureTests.cpp         pruebas del Módulo 1 (sin JUCE)
 ```
 
 **El Core no depende de JUCE.** Así, todo el DSP se compila y se prueba en segundos en cualquier plataforma, y el plugin solo traduce entre el host y el Core.
@@ -124,7 +133,43 @@ Los módulos siempre devuelven señal 100 % wet. El bypass y el dry/wet de cada 
 - `masterBypass` es también el parámetro de bypass del host, así que el botón de bypass de FL Studio usa el mismo fundido sin clicks.
 - El estado se guarda en XML con la raíz `<VintageMaker stateVersion="1">`. Un estado de una versión futura se rechaza; si a un estado antiguo le faltan parámetros, esos conservan sus valores por defecto.
 
+## Módulo 1 — Texture
+
+Flujo: `entrada → Wow + Flutter → Degrade → caída de nivel del Drop → + ruido de vinilo`.
+
+| Sección | Controles | Cómo funciona |
+|---|---|---|
+| **Wow** | Depth, Rate (0,1–2 Hz), Shape | Retardo variable de hasta ±3 ms. Shape: seno → triángulo → deriva aleatoria suave |
+| **Flutter** | Depth, Rate (4–15 Hz), Variation | Retardo variable de hasta ±0,2 ms. Variation aleatoriza velocidad y amplitud |
+| **Vinyl** | Amount, Crackle Type, Drop | Hiss rosa + ráfagas de crackle (Normal / Dusty / Heavy). Drop: bajada ocasional de tono y nivel (cada ~30 s con Drop=0 % hasta ~5 s con 100 %) |
+| **Degrade** | Amount, Bandwidth, Smoothing | Suaviza transitorios → saturación suave → pasa-altos y pasa-bajos. Bandwidth: de 500 Hz–1,2 kHz (estrecho) a 40 Hz–12 kHz (ancho) |
+
+Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
+
+- **Sin latencia.** El retardo es `profundidad × (1 + modulación)`, así que con Wow, Flutter y Drop a 0 la señal pasa bit a bit. El retardo medio crece con la profundidad (hasta unos 3 ms con Wow al máximo), lo que forma parte del efecto.
+- La desviación de tono depende de la velocidad: con Wow al 100 % y 1 Hz es de ±1,9 %.
+- Los cambios de profundidad son lentos a propósito (0,4 s en Wow): una rampa rápida del retardo doblaría el tono.
+- El ruido es aditivo y no depende del nivel de entrada. Tiene semillas fijas, así que dos renders iguales dan el mismo resultado.
+- **Valores por defecto:** Wow 25 %, Flutter 15 %, Vinyl 20 %, Degrade 25 %. A diferencia del Módulo 0, el plugin **ya no es transparente** con los valores por defecto.
+- Un estado guardado antes del Módulo 1 se carga bien. Los parámetros de Texture que no estén en él conservan su valor actual.
+
+### Parámetros de Texture (versión 1)
+
+| ID | Rango | Defecto |
+|---|---|---|
+| `texEnable` | on/off | on |
+| `texMix` | 0–100 % | 100 % |
+| `texWowDepth` / `texWowShape` | 0–100 % | 25 % / 0 % |
+| `texWowRate` | 0,1–2 Hz | 0,6 Hz |
+| `texFlutterDepth` / `texFlutterVariation` | 0–100 % | 15 % / 30 % |
+| `texFlutterRate` | 4–15 Hz | 8 Hz |
+| `texVinylAmount` / `texVinylDrop` | 0–100 % | 20 % / 0 % |
+| `texCrackleType` | Normal, Dusty, Heavy | Normal |
+| `texDegradeAmount` / `texDegradeBandwidth` / `texDegradeSmoothing` | 0–100 % | 25 % / 60 % / 30 % |
+
 ## Pruebas
+
+`TextureTests` (93 comprobaciones): retardo Hermite, salida idéntica a la entrada con todo apagado, **desviación de tono medida por cruces por cero** (Wow ±1,9 %, Flutter ±1,26 %, mitad de profundidad = mitad de desviación), niveles de hiss y crackle por tipo, drop (caída de nivel y de tono), respuesta en frecuencia de Degrade, suavizado de transitorios, resultados idénticos con cualquier tamaño de bloque, frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
 `CoreTests` (248 comprobaciones) cubre:
 
@@ -141,4 +186,5 @@ Los módulos siempre devuelven señal 100 % wet. El bypass y el dry/wet de cada 
 - [ ] Compilación MSVC en Debug y Release, sin avisos con `/W4`.
 - [ ] `ctest` en verde en Windows.
 - [ ] Carga en FL Studio 2026, audio entrante y saliente, automatización, bypass y guardado/carga de proyecto.
+- [ ] Texture en FL Studio: oír cada sección por separado (Wow, Flutter, Vinyl, Degrade) y comprobar que el Dry/Wet y el encendido no hacen clicks.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

@@ -9,12 +9,16 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this)
 {
-    // Module 0: every slot holds the transparent TestProcessor until its real
-    // module (Texture, Color, Movement, Space) is implemented.
+    // Module 1: Texture is real. The other slots hold the transparent
+    // TestProcessor until Color, Movement and Space are implemented.
     using Slot = vm::AudioEngine::Slot;
     auto& engine = master.getEngine();
 
-    for (auto slot : { Slot::texture, Slot::color, Slot::movement, Slot::space })
+    auto textureModule = std::make_unique<vm::TextureProcessor>();
+    texture = textureModule.get();
+    engine.setModule (Slot::texture, std::move (textureModule));
+
+    for (auto slot : { Slot::color, Slot::movement, Slot::space })
         engine.setModule (slot, std::make_unique<vm::TestProcessor>());
 }
 
@@ -40,6 +44,7 @@ void VintageMakerAudioProcessor::prepareToPlay (double sampleRate, int samplesPe
 
     // Start from the current parameter values, without ramping from defaults.
     master.setParameters (parameters.readMasterParameters());
+    applyModuleParameters();
     master.reset();
 
     setLatencySamples (master.getLatencySamples());
@@ -54,6 +59,16 @@ void VintageMakerAudioProcessor::reset()
     master.reset();
 }
 
+void VintageMakerAudioProcessor::applyModuleParameters() noexcept
+{
+    const auto slot = parameters.readTextureSlot();
+    auto& textureSlot = master.getEngine().getSlot (vm::AudioEngine::Slot::texture);
+    textureSlot.setEnabled (slot.enabled);
+    textureSlot.setMix (slot.mix);
+
+    texture->setParameters (parameters.readTextureParameters());
+}
+
 void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buffer,
                                                   const vm::MasterParameters& p) noexcept
 {
@@ -65,6 +80,7 @@ void VintageMakerAudioProcessor::processWithCore (juce::AudioBuffer<float>& buff
         buffer.clear (ch, 0, numSamples);
 
     master.setParameters (p);
+    applyModuleParameters();
 
     const int numChannels = juce::jmin (buffer.getNumChannels(), vm::maxChannels);
     master.process (vm::AudioBufferView (buffer.getArrayOfWritePointers(), numChannels, numSamples));

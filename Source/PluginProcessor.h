@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/MasterProcessor.h"
+#include "DSP/Texture/TextureProcessor.h"
 #include "Plugin/ParameterManager.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -49,9 +50,11 @@ public:
 
 private:
     void processWithCore (juce::AudioBuffer<float>& buffer, const vm::MasterParameters& p) noexcept;
+    void applyModuleParameters() noexcept;
 
     vm::ParameterManager parameters;
     vm::MasterProcessor master;
+    vm::TextureProcessor* texture = nullptr; // owned by master's engine
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VintageMakerAudioProcessor)
 };

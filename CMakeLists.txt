@@ -27,6 +27,17 @@ add_library(VintageCore STATIC
     Source/Core/MasterProcessor.cpp
     Source/DSP/Test/TestProcessor.h
     Source/DSP/Test/TestProcessor.cpp
+    Source/DSP/Texture/TextureParameters.h
+    Source/DSP/Texture/NoiseGenerator.h
+    Source/DSP/Texture/DelayLine.h
+    Source/DSP/Texture/WowFlutter.h
+    Source/DSP/Texture/WowFlutter.cpp
+    Source/DSP/Texture/VinylProcessor.h
+    Source/DSP/Texture/VinylProcessor.cpp
+    Source/DSP/Texture/DegradeProcessor.h
+    Source/DSP/Texture/DegradeProcessor.cpp
+    Source/DSP/Texture/TextureProcessor.h
+    Source/DSP/Texture/TextureProcessor.cpp
 )
 
 target_include_directories(VintageCore PUBLIC Source)
@@ -49,16 +60,18 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    add_executable(CoreTests Tests/CoreTests.cpp)
-    target_link_libraries(CoreTests PRIVATE VintageCore)
+    foreach(test_name CoreTests TextureTests)
+        add_executable(${test_name} Tests/${test_name}.cpp)
+        target_link_libraries(${test_name} PRIVATE VintageCore)
 
-    if(MSVC)
-        target_compile_options(CoreTests PRIVATE /W4 /permissive-)
-    else()
-        target_compile_options(CoreTests PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
+        if(MSVC)
+            target_compile_options(${test_name} PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
 
-    add_test(NAME CoreTests COMMAND CoreTests)
+        add_test(NAME ${test_name} COMMAND ${test_name})
+    endforeach()
 endif()
 
 # ---------------------------------------------------------------------------
