@@ -51,6 +51,7 @@ namespace vm::param
     inline constexpr const char* colType           = "colType";           // choice: Tube/Tape/Console
     inline constexpr const char* colTone           = "colTone";           // -100..+100 percent
     inline constexpr const char* colMagicChorus    = "colChorusAmount";   // percent (ID kept from v0.3)
+    inline constexpr const char* colOversampling   = "colOversampling";   // choice: Off/2x/4x (non-linear saturation stage)
 
     // --- Module 3: MOVEMENT (v1) ---
     inline constexpr const char* movEnable         = "movEnable";         // bool

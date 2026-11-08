@@ -25,7 +25,6 @@ namespace vm
         sampleRate = spec.sampleRate;
         drive.prepare (sampleRate, param::smoothingSeconds);
         typeFade.prepare (sampleRate, 0.01);
-        dcCoef = 1.0f - (float) (twoPi * 8.0 / sampleRate);
         reset();
     }
 
@@ -33,6 +32,7 @@ namespace vm
     {
         drive.setCurrentAndTarget (drive.getTarget());
         activeType = type;
+        activeFactor = targetFactor;
         typeFade.setCurrentAndTarget (1.0f);
         driveNow = drive.getCurrent();
         active = driveNow > 0.0f;
@@ -84,8 +84,11 @@ namespace vm
         blend = std::min (1.0f, driveNow * 10.0f);
 
         // Tape head loss: the low-pass closes from 16 kHz to 7 kHz with Drive.
+        // (At the oversampled rate when oversampling is on.)
+        const double rate = sampleRate * (double) activeFactor;
         const double cutoff = std::min (0.45 * sampleRate, 16000.0 - 9000.0 * (double) driveNow);
-        tapeCoef = 1.0f - (float) std::exp (-twoPi * cutoff / sampleRate);
+        tapeCoef = 1.0f - (float) std::exp (-twoPi * cutoff / rate);
+        dcCoef = 1.0f - (float) (twoPi * 8.0 / rate);
     }
 
     void SaturationProcessor::advance() noexcept
@@ -105,11 +108,14 @@ namespace vm
         active = nowActive;
 
         // Switching curves: fade the effect out, swap, fade back in (no click).
-        if (activeType != type)
+        if (activeType != type || activeFactor != targetFactor)
         {
             if (! active)
             {
                 activeType = type;
+                activeFactor = targetFactor;
+                for (auto& s : states)
+                    s = ChannelState {};
                 updateMakeup();
             }
             else
@@ -119,8 +125,9 @@ namespace vm
                 if (! typeFade.isSmoothing() && typeFade.getCurrent() <= 0.0f)
                 {
                     activeType = type;
+                    activeFactor = targetFactor;
                     for (auto& s : states)
-                        s.previousU = 0.0;
+                        s = ChannelState {};
                     updateMakeup();
                     typeFade.setTarget (1.0f);
                 }
@@ -134,13 +141,9 @@ namespace vm
         blendNow = blend * typeFade.getNext();
     }
 
-    float SaturationProcessor::process (int channel, float input) noexcept
+    float SaturationProcessor::wetSample (ChannelState& s, double input) noexcept
     {
-        if (! active)
-            return input;
-
-        auto& s = states[(std::size_t) channel];
-        const double u = (double) input * preGain;
+        const double u = input * preGain;
 
         double y;
         const double du = u - s.previousU;
@@ -166,6 +169,23 @@ namespace vm
             s.lowpass += tapeCoef * (wet - s.lowpass);
             wet = s.lowpass;
         }
+
+        return wet;
+    }
+
+    float SaturationProcessor::process (int channel, float input) noexcept
+    {
+        if (! active)
+            return input;
+
+        auto& s = states[(std::size_t) channel];
+
+        float wet;
+        if (activeFactor == 1)
+            wet = wetSample (s, (double) input);
+        else
+            wet = (float) s.oversampler.process ((double) input, activeFactor,
+                                                 [this, &s] (double v) noexcept { return (double) wetSample (s, v); });
 
         return input + blendNow * (wet - input);
     }

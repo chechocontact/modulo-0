@@ -13,6 +13,14 @@ for %%C in (Debug Release) do (
     ctest --test-dir build -C %%C --output-on-failure || goto :error
 )
 
+rem Installer (only if Inno Setup 6 is installed): build\installer\output\VintageMaker-<version>-Setup.exe
+set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if exist "%ISCC%" (
+    "%ISCC%" "/DVst3Dir=%CD%\build\VintageMaker_artefacts\Release\VST3\Vintage Maker.vst3" build\installer\VintageMaker.iss || goto :error
+) else (
+    echo Inno Setup 6 not found: installer skipped.
+)
+
 echo.
 echo OK. Plugin: build\VintageMaker_artefacts\Release\VST3\Vintage Maker.vst3
 exit /b 0

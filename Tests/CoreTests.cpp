@@ -930,6 +930,15 @@ namespace
         std::printf ("  perf: %d s of stereo 48 kHz in %.4f s (%.0fx real time, %.4f %% of one core)\n",
                      seconds, elapsed, seconds / elapsed, 100.0 * elapsed / seconds);
         CHECK (allFinite (b));
+
+        // Wall-clock limits mean nothing under a sanitizer (3-10x slower) or on a loaded machine.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
+        return;
+#elif defined(__has_feature)
+ #if __has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)
+        return;
+ #endif
+#endif
         CHECK (elapsed < seconds * 0.05); // Core overhead must stay below 5 % of one core
     }
 

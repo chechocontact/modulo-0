@@ -16,6 +16,19 @@ namespace vm
         ensemble
     };
 
+    // Oversampling of the non-linear stage (the saturation). Off = 1x.
+    enum class OversamplingMode
+    {
+        off = 0,
+        x2,
+        x4
+    };
+
+    inline constexpr int oversamplingFactor (OversamplingMode mode) noexcept
+    {
+        return mode == OversamplingMode::x4 ? 4 : mode == OversamplingMode::x2 ? 2 : 1;
+    }
+
     namespace color
     {
         inline constexpr float chorusRateMinHz = 0.05f;
@@ -45,6 +58,8 @@ namespace vm
         // MAGIC CHORUS: one knob. It scales the modulation depth of a lush
         // 3-voice ensemble and fades the effect in (0 = off, bit-transparent).
         float magicChorus = 0.5f;                // 0..1
+
+        OversamplingMode oversampling = OversamplingMode::off;
 
         bool operator== (const ColorParameters&) const = default;
     };

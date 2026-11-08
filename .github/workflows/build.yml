@@ -79,6 +79,26 @@ jobs:
           ./pluginval/pluginval.exe --strictness-level 10 --skip-gui-tests --timeout-ms 600000 --validate "$plugin"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Build installer (Release only)
+        if: matrix.config == 'Release'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { Write-Error "ISCC.exe not found: $iscc"; exit 1 }
+          $bundle = (Resolve-Path 'build/VintageMaker_artefacts/Release/VST3/Vintage Maker.vst3').Path
+          & $iscc "/DVst3Dir=$bundle" 'build/installer/VintageMaker.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem build/installer/output
+
+      - name: Upload installer (Release only)
+        if: matrix.config == 'Release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: VintageMaker-Installer-windows
+          path: build/installer/output/*.exe
+          if-no-files-found: error
+
       - name: Upload VST3 (Release only)
         if: matrix.config == 'Release'
         uses: actions/upload-artifact@v7

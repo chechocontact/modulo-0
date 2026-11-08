@@ -2,6 +2,7 @@
 
 #include "ColorParameters.h"
 #include "Core/AudioBufferView.h"
+#include "Core/Oversampler.h"
 #include "Core/SmoothedValue.h"
 
 #include <array>
@@ -23,6 +24,10 @@ namespace vm
     // loudness stays roughly constant. Below Drive = 0.1 the effect is
     // crossfaded in, and at Drive = 0 it is skipped (bit-transparent).
     //
+    // Oversampling (off / 2x / 4x) runs the curve, its ADAA and the post filters at the
+    // higher rate between half-band filters (Core/Oversampler.h). Changing it while the
+    // effect is audible dips the effect briefly, like switching the curve, so there is no click.
+    //
     // Call advance() once per sample frame, then process() for each channel.
     class SaturationProcessor
     {
@@ -30,7 +35,8 @@ namespace vm
         void prepare (const ProcessSpec& spec);
         void reset() noexcept;
         void setParams (float drive, ColorType type) noexcept;
-        void setAntiAliasing (bool enabled) noexcept { antiAliasing = enabled; } // tests / future Oversampling control
+        void setAntiAliasing (bool enabled) noexcept { antiAliasing = enabled; } // tests
+        void setOversampling (OversamplingMode mode) noexcept { targetFactor = oversamplingFactor (mode); }
 
         void advance() noexcept;
         float process (int channel, float input) noexcept;
@@ -41,7 +47,10 @@ namespace vm
             double previousU = 0.0;
             float lowpass = 0.0f;
             float dcIn = 0.0f, dcOut = 0.0f;
+            Oversampler oversampler;
         };
+
+        float wetSample (ChannelState& s, double input) noexcept;
 
         double shape (double u) const noexcept;
         double antiderivative (double u) const noexcept;
@@ -54,6 +63,8 @@ namespace vm
         ColorType type = ColorType::tube;
         ColorType activeType = ColorType::tube;
         bool antiAliasing = true;
+        int targetFactor = 1;   // requested oversampling factor (1, 2 or 4)
+        int activeFactor = 1;   // factor in use (changes only while the effect is faded out)
 
         float driveNow = 0.0f;
         double preGain = 1.0;

@@ -40,6 +40,7 @@ namespace vm
         q.tone = clean (p.tone, q.tone, -1.0f, 1.0f);
         q.magicChorus = clean (p.magicChorus, q.magicChorus, 0.0f, 1.0f);
         q.type = (int) p.type >= 0 && (int) p.type <= 2 ? p.type : q.type;
+        q.oversampling = (int) p.oversampling >= 0 && (int) p.oversampling <= 2 ? p.oversampling : q.oversampling;
 
         parameters = q;
         applyParameters();
@@ -48,6 +49,7 @@ namespace vm
     void ColorProcessor::applyParameters() noexcept
     {
         saturation.setParams (parameters.drive, parameters.type);
+        saturation.setOversampling (parameters.oversampling);
         tone.setTone (parameters.tone);
         chorus.setParams ({ parameters.magicChorus, color::magicChorusRateHz, color::magicChorusDepth,
                             color::magicChorusWidth, color::magicChorusMix, color::magicChorusMode });

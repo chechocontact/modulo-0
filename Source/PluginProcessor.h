@@ -2,6 +2,7 @@
 
 #include "Chain/VintageChain.h"
 #include "Plugin/ParameterManager.h"
+#include "Presets/PresetManager.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -46,6 +47,7 @@ public:
     juce::AudioProcessorParameter* getBypassParameter() const override;
 
     vm::ParameterManager& getParameterManager() noexcept { return parameters; }
+    vm::PresetManager& getPresetManager() noexcept { return presets; }
 
     // Level meters for the interface (lock-free reads).
     const vm::LevelMeter& getInputMeter() const noexcept { return chain.getInputMeter(); }
@@ -56,6 +58,7 @@ private:
     vm::ChainParameters readParameters (bool forceBypass) noexcept;
 
     vm::ParameterManager parameters;
+    vm::PresetManager presets;
     vm::VintageChain chain;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VintageMakerAudioProcessor)

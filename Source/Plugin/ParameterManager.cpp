@@ -91,6 +91,11 @@ namespace vm
                 juce::AudioParameterFloatAttributes().withLabel ("%").withStringFromValueFunction (formatSignedPercent)));
 
             addPercent (layout, param::colMagicChorus, "Magic Chorus", d.magicChorus * 100.0f);
+
+            // Plugin default is 2x (better quality for the price of a little CPU); the Core default stays Off.
+            layout.addChild (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::colOversampling), "Oversampling",
+                juce::StringArray { "Off", "2x", "4x" }, (int) OversamplingMode::x2));
         }
 
         void addMovementParameters (juce::AudioProcessorParameterGroup& layout)
@@ -233,6 +238,7 @@ namespace vm
         col.drive = requireParameter (state, param::colDrive);
         col.type = requireParameter (state, param::colType);
         col.tone = requireParameter (state, param::colTone);
+        col.oversampling = requireParameter (state, param::colOversampling);
         col.magicChorus = requireParameter (state, param::colMagicChorus);
 
         mov.enable = requireParameter (state, param::movEnable);
@@ -331,6 +337,7 @@ namespace vm
         p.type = (ColorType) juce::jlimit (0, 2, juce::roundToInt (col.type->load (std::memory_order_relaxed)));
         p.tone = pct (col.tone);
         p.magicChorus = pct (col.magicChorus);
+        p.oversampling = (OversamplingMode) juce::jlimit (0, 2, juce::roundToInt (col.oversampling->load (std::memory_order_relaxed)));
         return p;
     }
 

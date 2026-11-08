@@ -7,12 +7,66 @@
 #include "UI/Theme/Textures.h"
 #include "UI/Theme/VintageLookAndFeel.h"
 
+#include <functional>
 #include <vector>
 
 namespace
 {
     using namespace vm::ui;
     namespace id = vm::param;
+
+    // "V1.0" (shown without the patch number while it is 0).
+    juce::String versionLabel()
+    {
+        auto parts = juce::StringArray::fromTokens (JucePlugin_VersionString, ".", "");
+        if (parts.size() >= 3 && parts[2] == "0")
+            parts.remove (2);
+
+        return "V" + parts.joinIntoString (".");
+    }
+
+    // The preset name window of the header: click it for the list of presets.
+    class PresetDisplay : public juce::Component
+    {
+    public:
+        std::function<void()> onClick;
+
+        void setContent (const juce::String& newName, bool isModified)
+        {
+            if (name != newName || modified != isModified)
+            {
+                name = newName;
+                modified = isModified;
+                repaint();
+            }
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            const auto area = getLocalBounds().toFloat();
+            g.setColour (colour::recess);
+            g.fillRoundedRectangle (area, 4.0f);
+            g.setColour (juce::Colours::white.withAlpha (isMouseOver() ? 0.30f : 0.14f));
+            g.drawRoundedRectangle (area.reduced (0.5f), 4.0f, 1.0f);
+
+            g.setColour (colour::amber);
+            g.setFont (makeFont (16.0f, "Bold"));
+            g.drawText (name + (modified ? " *" : ""), getLocalBounds().reduced (12, 0), juce::Justification::centred, true);
+        }
+
+        void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+        void mouseExit (const juce::MouseEvent&) override { repaint(); }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (onClick)
+                onClick();
+        }
+
+    private:
+        juce::String name;
+        bool modified = false;
+    };
 
     // Three-line "hamburger" button.
     class MenuButton : public juce::Button
@@ -44,6 +98,7 @@ class VintageMakerEditor::Content final : public juce::Component
 public:
     explicit Content (VintageMakerAudioProcessor& p)
         : processor (p),
+          presets (p.getPresetManager()),
           wood (createWoodTexture (designWidth, designHeight)),
           metal (createBrushedMetalTexture (designWidth, designHeight))
     {
@@ -74,6 +129,8 @@ public:
         color->addKnob (id::colTone, "Tone");
         color->addGroup ("Magic Chorus");
         color->addKnob (id::colMagicChorus, "Amount");
+        color->addGroup ("Oversampling");
+        color->addChoice (id::colOversampling, "Factor");
 
         movement = makeSection (state, { "03", "Movement", id::movEnable, id::movMix, 70, false });
         movement->addGroup ("Granular");
@@ -115,23 +172,23 @@ public:
         addAndMakeVisible (*inputLevel);
         addAndMakeVisible (*outputLevel);
 
-        // Preset bar: laid out as in the guide but disabled until Module 8
-        // (presets) exists; nothing here pretends to work.
+        // Preset bar (guide layout): LOAD, previous / name / next, SAVE.
         addAndMakeVisible (menuButton);
         menuButton.onClick = [this] { showMainMenu(); };
 
-        for (auto* button : { &loadButton, &saveButton })
-        {
-            addAndMakeVisible (*button);
-            button->setEnabled (false);
-        }
+        addAndMakeVisible (loadButton);
+        loadButton.onClick = [this] { chooseFileToLoad(); };
+        addAndMakeVisible (saveButton);
+        saveButton.onClick = [this] { saveClicked(); };
 
-        for (auto* arrow : { &previousButton, &nextButton })
-        {
-            addAndMakeVisible (*arrow);
-            arrow->setEnabled (false);
-            arrow->setAlpha (0.4f);
-        }
+        addAndMakeVisible (previousButton);
+        previousButton.onClick = [this] { presets.loadPrevious(); };
+        addAndMakeVisible (nextButton);
+        nextButton.onClick = [this] { presets.loadNext(); };
+
+        addAndMakeVisible (presetDisplay);
+        presetDisplay.onClick = [this] { showPresetMenu(); };
+        refresh();
     }
 
     ~Content() override
@@ -139,10 +196,12 @@ public:
         setLookAndFeel (nullptr);
     }
 
-    void refreshMeters()
+    // Timer (30 Hz): meters and the preset name (the host can change the state at any time).
+    void refresh()
     {
         inputLevel->refresh();
         outputLevel->refresh();
+        presetDisplay.setContent (presets.getCurrentName(), presets.isModified());
     }
 
     void resized() override
@@ -160,7 +219,7 @@ public:
         menuButton.setBounds (margin, margin + 4, 46, 46);
         loadButton.setBounds (430, margin + 4, 96, 46);
         previousButton.setBounds (540, margin + 4, 40, 46);
-        presetDisplay = { 580, margin + 4, 300, 46 };
+        presetDisplay.setBounds (580, margin + 4, 300, 46);
         nextButton.setBounds (880, margin + 4, 40, 46);
         saveButton.setBounds (934, margin + 4, 96, 46);
 
@@ -215,14 +274,14 @@ public:
         g.setColour (colour::cream);
         g.drawText ("Vintage Maker", titleArea, juce::Justification::centredLeft, false);
 
-        // Preset display (the preset system arrives with Module 8).
-        g.setColour (colour::recess);
-        g.fillRoundedRectangle (presetDisplay.toFloat(), 4.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.14f));
-        g.drawRoundedRectangle (presetDisplay.toFloat().reduced (0.5f), 4.0f, 1.0f);
-        g.setColour (colour::amberDim.brighter (0.5f));
-        g.setFont (makeFont (15.0f));
-        g.drawText ("No presets yet (Module 8)", presetDisplay, juce::Justification::centred, false);
+        // Version, small and engraved next to the title.
+        const float titleWidth = juce::GlyphArrangement::getStringWidth (makeTitleFont (38.0f), "Vintage Maker");
+        const auto versionArea = juce::Rectangle<int> (76 + (int) titleWidth + 10, 36, 70, 20);
+        g.setFont (makeFont (12.5f, "Bold"));
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.drawText (versionLabel(), versionArea.translated (1, 1), juce::Justification::centredLeft, false);
+        g.setColour (colour::cream.withAlpha (0.60f));
+        g.drawText (versionLabel(), versionArea, juce::Justification::centredLeft, false);
     }
 
 private:
@@ -236,29 +295,189 @@ private:
     void showMainMenu()
     {
         juce::PopupMenu menu;
-        menu.addItem (1, "Reset all parameters");
+        menu.addItem (1, "Save preset as...");
+        menu.addItem (2, "Load preset from file...");
+        menu.addItem (3, "Open presets folder");
         menu.addSeparator();
-        menu.addItem (2, "Presets (available in Module 8)", false);
+        menu.addItem (4, "Reset all parameters");
+        menu.addSeparator();
+        menu.addItem (5, "About Vintage Maker " + versionLabel());
 
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&menuButton),
                             [safe = juce::Component::SafePointer<Content> (this)] (int result)
                             {
-                                if (safe != nullptr && result == 1)
-                                    safe->resetAllParameters();
+                                if (safe == nullptr)
+                                    return;
+
+                                switch (result)
+                                {
+                                    case 1: safe->promptSaveAs(); break;
+                                    case 2: safe->chooseFileToLoad(); break;
+                                    case 3: safe->openPresetFolder(); break;
+                                    case 4: safe->presets.resetAllToDefaults(); break;
+                                    case 5: safe->showAbout(); break;
+                                    default: break;
+                                }
                             });
     }
 
-    void resetAllParameters()
+    void showPresetMenu()
     {
-        for (auto* parameter : processor.getParameters())
+        presets.refresh();
+        const auto& entries = presets.getEntries();
+        const int current = presets.getCurrentIndex();
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("Factory");
+        bool userHeaderAdded = false;
+
+        for (int i = 0; i < (int) entries.size(); ++i)
         {
-            parameter->beginChangeGesture();
-            parameter->setValueNotifyingHost (parameter->getDefaultValue());
-            parameter->endChangeGesture();
+            if (! entries[(size_t) i].factory && ! userHeaderAdded)
+            {
+                menu.addSeparator();
+                menu.addSectionHeader ("User");
+                userHeaderAdded = true;
+            }
+
+            menu.addItem (i + 1, entries[(size_t) i].name, true, i == current);
+        }
+
+        if (! userHeaderAdded)
+        {
+            menu.addSeparator();
+            menu.addSectionHeader ("User");
+            menu.addItem (100000, "(none yet - SAVE creates one)", false);
+        }
+
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetDisplay),
+                            [safe = juce::Component::SafePointer<Content> (this)] (int result)
+                            {
+                                if (safe != nullptr && result > 0 && result < 100000)
+                                    safe->presets.loadEntry (result - 1);
+                            });
+    }
+
+    void showMessage (const juce::String& message, juce::MessageBoxIconType icon = juce::MessageBoxIconType::WarningIcon)
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (icon)
+                                          .withTitle ("Vintage Maker")
+                                          .withMessage (message)
+                                          .withButton ("OK", 1)
+                                          .withAssociatedComponent (this),
+                                      nullptr);
+    }
+
+    void showAbout()
+    {
+        showMessage ("Vintage Maker " + versionLabel() + "\n\nTexture - Color - Movement - Space\nwith the Vintage Engine.\n\nVST3 for Windows 64-bit.",
+                     juce::MessageBoxIconType::InfoIcon);
+    }
+
+    void openPresetFolder()
+    {
+        const auto folder = vm::PresetManager::getUserPresetDirectory();
+        folder.createDirectory();
+        folder.startAsProcess();
+    }
+
+    void chooseFileToLoad()
+    {
+        auto folder = vm::PresetManager::getUserPresetDirectory();
+        fileChooser = std::make_shared<juce::FileChooser> ("Load a Vintage Maker preset",
+                                                            folder.isDirectory() ? folder : juce::File(),
+                                                            juce::String ("*") + vm::PresetManager::fileExtension);
+
+        fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                                  [safe = juce::Component::SafePointer<Content> (this)] (const juce::FileChooser& chooser)
+                                  {
+                                      const auto file = chooser.getResult();
+                                      if (safe == nullptr || ! file.existsAsFile())
+                                          return;
+
+                                      const auto result = safe->presets.loadFile (file);
+                                      if (result.failed())
+                                          safe->showMessage (result.getErrorMessage());
+                                  });
+    }
+
+    // SAVE: overwrites the current user preset; anything else asks for a name (Save As).
+    void saveClicked()
+    {
+        if (! presets.isCurrentFactory() && presets.userPresetExists (presets.getCurrentName()))
+        {
+            const auto result = presets.saveAs (presets.getCurrentName(), true);
+            if (result.failed())
+                showMessage (result.getErrorMessage());
+        }
+        else
+        {
+            promptSaveAs();
         }
     }
 
+    void promptSaveAs()
+    {
+        saveDialog = std::make_unique<juce::AlertWindow> ("Save preset", "Name of the preset:", juce::MessageBoxIconType::NoIcon, this);
+        saveDialog->addTextEditor ("name", presets.isCurrentFactory() ? juce::String() : presets.getCurrentName());
+        saveDialog->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        saveDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+        saveDialog->enterModalState (true,
+                                     juce::ModalCallbackFunction::create ([safe = juce::Component::SafePointer<Content> (this)] (int result)
+                                                                          {
+                                                                              if (safe == nullptr)
+                                                                                  return;
+
+                                                                              const auto name = safe->saveDialog != nullptr
+                                                                                                    ? safe->saveDialog->getTextEditorContents ("name")
+                                                                                                    : juce::String();
+
+                                                                              // Release the dialog after this callback has returned.
+                                                                              juce::MessageManager::callAsync ([safe]
+                                                                                                               {
+                                                                                                                   if (safe != nullptr)
+                                                                                                                       safe->saveDialog.reset();
+                                                                                                               });
+
+                                                                              if (result == 1)
+                                                                                  safe->trySave (name);
+                                                                          }),
+                                     false);
+    }
+
+    void trySave (const juce::String& name)
+    {
+        if (presets.userPresetExists (name) && ! presets.isFactoryName (name))
+        {
+            juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                              .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                              .withTitle ("Overwrite preset?")
+                                              .withMessage ("A preset called \"" + name.trim() + "\" already exists. Replace it?")
+                                              .withButton ("Replace", 1)
+                                              .withButton ("Cancel", 0)
+                                              .withAssociatedComponent (this),
+                                          [safe = juce::Component::SafePointer<Content> (this), name] (int result)
+                                          {
+                                              if (safe != nullptr && result == 1)
+                                                  safe->finishSave (name, true);
+                                          });
+            return;
+        }
+
+        finishSave (name, false);
+    }
+
+    void finishSave (const juce::String& name, bool overwrite)
+    {
+        const auto result = presets.saveAs (name, overwrite);
+        if (result.failed())
+            showMessage (result.getErrorMessage());
+    }
+
     VintageMakerAudioProcessor& processor;
+    vm::PresetManager& presets;
 
     VintageLookAndFeel lookAndFeel;
     juce::Image wood, metal;
@@ -269,8 +488,12 @@ private:
     MenuButton menuButton;
     juce::TextButton loadButton { "LOAD" }, saveButton { "SAVE" };
     juce::ArrowButton previousButton { "previous", 0.5f, colour::cream }, nextButton { "next", 0.0f, colour::cream };
+    PresetDisplay presetDisplay;
 
-    juce::Rectangle<int> presetDisplay, ioPlate;
+    std::shared_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<juce::AlertWindow> saveDialog;
+
+    juce::Rectangle<int> ioPlate;
 };
 
 VintageMakerEditor::VintageMakerEditor (VintageMakerAudioProcessor& p)
@@ -300,5 +523,5 @@ void VintageMakerEditor::resized()
 
 void VintageMakerEditor::timerCallback()
 {
-    content->refreshMeters();
+    content->refresh();
 }

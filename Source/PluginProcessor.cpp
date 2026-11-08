@@ -6,7 +6,8 @@ VintageMakerAudioProcessor::VintageMakerAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this)
+      parameters (*this),
+      presets (*this, parameters.getState())
 {
 }
 

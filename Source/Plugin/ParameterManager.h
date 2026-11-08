@@ -82,6 +82,7 @@ namespace vm
             std::atomic<float>* type = nullptr;
             std::atomic<float>* tone = nullptr;
             std::atomic<float>* magicChorus = nullptr;
+            std::atomic<float>* oversampling = nullptr;
         } col;
 
         struct MovementHandles

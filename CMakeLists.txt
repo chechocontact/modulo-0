@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VintageMaker VERSION 0.1.0 LANGUAGES C CXX)
+# The one place the product version lives. It feeds the plugin (JUCE VERSION -> Windows file
+# properties, VST3 and host version, the "V1.0" in the interface) and the installer.
+project(VintageMaker VERSION 1.0.0 LANGUAGES C CXX)
+
+if(PROJECT_VERSION_PATCH EQUAL 0)
+    set(VM_VERSION_DISPLAY "V${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
+else()
+    set(VM_VERSION_DISPLAY "V${PROJECT_VERSION}")
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,6 +25,9 @@ add_library(VintageCore STATIC
     Source/Core/AudioBufferView.h
     Source/Core/DenormalGuard.h
     Source/Core/ModuleProcessor.h
+    Source/Core/Oversampler.h
+    Source/Presets/ParameterTable.h
+    Source/Presets/FactoryPresets.h
     Source/Core/ParameterIds.h
     Source/Core/SmoothedValue.h
     Source/Core/ModuleSlot.h
@@ -98,7 +109,7 @@ endif()
 if(VM_BUILD_TESTS)
     enable_testing()
 
-    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests EngineTests IntegrationTests)
+    foreach(test_name CoreTests TextureTests ColorTests MovementTests SpaceTests EngineTests IntegrationTests OversamplingTests PresetTests)
         add_executable(${test_name} Tests/${test_name}.cpp)
         target_link_libraries(${test_name} PRIVATE VintageCore)
 
@@ -127,6 +138,9 @@ if(VM_BUILD_PLUGIN)
     FetchContent_MakeAvailable(JUCE)
 
     juce_add_plugin(VintageMaker
+        VERSION                  ${PROJECT_VERSION}
+        DESCRIPTION              "Vintage Maker - lo-fi tape and vinyl multi-effect"
+        COMPANY_COPYRIGHT        "Copyright (c) 2026 Vintage Maker"
         COMPANY_NAME             "Vintage Maker"
         PRODUCT_NAME             "Vintage Maker"
         BUNDLE_ID                com.vintagemaker.VintageMaker
@@ -144,6 +158,8 @@ if(VM_BUILD_PLUGIN)
     target_sources(VintageMaker PRIVATE
         Source/PluginProcessor.h
         Source/PluginProcessor.cpp
+        Source/Presets/PresetManager.h
+        Source/Presets/PresetManager.cpp
         Source/PluginEditor.h
         Source/PluginEditor.cpp
         Source/UI/Theme/Palette.h
@@ -178,4 +194,7 @@ if(VM_BUILD_PLUGIN)
             juce::juce_recommended_config_flags
             juce::juce_recommended_lto_flags
             juce::juce_recommended_warning_flags)
+
+    # Windows installer script (Inno Setup), with the product version filled in.
+    configure_file(installer/VintageMaker.iss.in ${CMAKE_BINARY_DIR}/installer/VintageMaker.iss @ONLY)
 endif()

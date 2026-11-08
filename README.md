@@ -4,7 +4,7 @@ Multiefecto VST3 de carácter cinematográfico, analógico y lo-fi (C++20, JUCE 
 
 Cadena: `INPUT → TEXTURE → COLOR → MOVEMENT → SPACE → OUTPUT`
 
-> Uso personal. No se distribuye.
+> Versión **1.0.0** (V1.0). Uso personal. No se distribuye.
 
 ## Estado
 
@@ -18,8 +18,8 @@ Cadena: `INPUT → TEXTURE → COLOR → MOVEMENT → SPACE → OUTPUT`
 | 5 — Vintage Engine | **Implementado y probado en Linux** |
 | 6 — Integración (Magnitude, medidores) | **Implementado y probado en Linux** |
 | 7 — Interfaz visual | **Implementada y compilada.** Falta verla en FL Studio |
-| 8 — Presets y estado | Pendiente (la barra de presets de la interfaz está desactivada) |
-| 9 — Optimización y distribución | Pendiente |
+| 8 — Presets y estado | **Implementado y compilado.** Falta probarlo en FL Studio |
+| 9 — Oversampling, instalador y versión 1.0 | **Oversampling probado en Linux.** Instalador generado por CI, falta probarlo en Windows |
 
 ## Compilar en Windows 11 (Visual Studio 2022, x64)
 
@@ -55,9 +55,9 @@ Solo pruebas del Core, sin JUCE: `cmake -S . -B build-core -DVM_BUILD_PLUGIN=OFF
 | Trabajo | Runner | Qué hace |
 |---|---|---|
 | Core tests (Linux, ASan/UBSan) | `ubuntu-latest` | Compila el Core con detectores de errores de memoria y comportamiento indefinido, y ejecuta `CoreTests` |
-| Windows x64 (Debug / Release) | `windows-latest` | Descarga JUCE, compila el VST3, ejecuta `CoreTests` y, en Release, **pluginval** con strictness 10; después sube el `.vst3` |
+| Windows x64 (Debug / Release) | `windows-latest` | Descarga JUCE, compila el VST3, ejecuta `CoreTests` y, en Release, **pluginval** con strictness 10; después sube el `.vst3` y, en Release, compila el **instalador** con Inno Setup |
 
-El plugin compilado (solo Release; Debug se compila y prueba pero no se sube) se descarga en *Actions → (ejecución) → Artifacts → `VintageMaker-VST3-windows-Release`*.
+El plugin compilado (solo Release; Debug se compila y prueba pero no se sube) se descarga en *Actions → (ejecución) → Artifacts → `VintageMaker-VST3-windows-Release`*, y el instalador (`VintageMaker-1.0.0-Setup.exe`) en `VintageMaker-Installer-windows`.
 
 Subir el proyecto (el zip ya incluye el historial de Git):
 
@@ -346,11 +346,34 @@ Editor propio (`Source/PluginEditor.*`, `Source/UI/`), sustituye al editor gené
 
 **Comportamiento**: doble clic = valor por defecto; Ctrl/Cmd + arrastrar = ajuste fino; clic derecho = menú del DAW para ese parámetro (si el host lo ofrece); automatización VST3 mediante los attachments de JUCE. La interfaz no toca el procesador: solo escribe parámetros por el APVTS y lee los medidores. La ventana se puede redimensionar (proporción fija 16:9).
 
-**Pendiente (Módulo 8)**: LOAD, SAVE, las flechas y el selector de preset se muestran como en la guía pero están desactivados; no hacen nada. El menú principal solo tiene "Reset all parameters" (real) y la entrada de presets desactivada.
+Junto al título aparece, discreta, la versión (**V1.0**). El menú principal (hamburguesa) tiene: guardar como, cargar desde archivo, abrir la carpeta de presets, restablecer todos los parámetros y "About".
 
 No hay pruebas automáticas de la interfaz (necesita pantalla); el código del editor se compila sin avisos y se valida a ojo en FL Studio (ver la lista de abajo).
 
+## Módulo 8 — Presets y estado
+
+`Source/Presets/`: `PresetManager` (JUCE, hilo de interfaz), `FactoryPresets.h` y `ParameterTable.h` (sin JUCE, con pruebas).
+
+- **Presets de fábrica (11)**, compilados dentro del plugin: Default, Cassette Vibes, Dusty Vinyl, Warm Tape, Broken Reel, Dream Cloud, Frozen Memory, Lo-fi Room, Slapback Tape, Ensemble Glow, Seasick Tremolo. Todo parámetro que un preset no menciona vuelve a su valor por defecto, así que cada preset es un estado completo y repetible.
+- **Presets de usuario**: archivos `.vmpreset` (XML) en `%APPDATA%\Vintage Maker\Presets`. Esa carpeta no la toca el instalador ni el desinstalador, así que los presets personalizados sobreviven a actualizaciones, reinstalaciones y desinstalación.
+- **Interfaz**: clic en el nombre = lista de presets (fábrica y usuario, con el actual marcado); flechas = anterior/siguiente; LOAD = cargar un archivo `.vmpreset`; SAVE = sobrescribe el preset de usuario actual (si el actual es de fábrica o no existe, pide un nombre); "Save preset as..." del menú. Un asterisco junto al nombre indica que se ha movido algo desde que se cargó o guardó. No se puede guardar con el nombre de un preset de fábrica y se pregunta antes de sobrescribir.
+- **Qué guarda**: todos los parámetros de los cuatro módulos, del Vintage Engine y los globales (Input/Output, Master Dry/Wet, Magnitude, Vinyl Amount). **No** guarda el Bypass general (es un interruptor de la sesión, no parte del sonido).
+- **Cómo carga**: solo por los parámetros del host (cada cambio es un gesto de parámetro), con los valores acotados a los rangos reales; un archivo ajeno, corrupto o de una versión más nueva se rechaza con un aviso sin tocar nada. El archivo se escribe primero a uno temporal para no destruir un preset existente si falla la escritura.
+- **Estado del proyecto**: el nombre del preset va dentro del estado del plugin; se recupera al reabrir el proyecto.
+
+## Módulo 9 — Oversampling, versión 1.0 e instalador
+
+**Oversampling OFF / 2x / 4x** (`Source/Core/Oversampler.h`): el proceso no lineal del plugin es la saturación de Color, y es lo que se sobremuestrea (selector "Oversampling" en la placa de Color; por defecto 2x en el plugin, Off en el Core). Filtros halfband de dos ramas con secciones allpass (diseño elíptico): 6 secciones para 1x↔2x (≥94 dB de rechazo por encima de 0,58 fs) y 3 secciones para 2x↔4x. **Sin latencia** (no hay que compensar nada) y ganancia exacta de 1 en continua; la fase no es lineal, lo cual no importa en una saturación. La curva, su ADAA y los filtros posteriores (DC del Tube, pérdida de cabeza del Tape) corren a la frecuencia sobremuestreada. Cambiar el factor en marcha hace un pequeño valle del efecto, como cambiar de curva, sin clic. Medido: el nivel de aliasing baja respecto a Off unos 10 a 15 dB en 2x y unos 28 dB en 4x (según la curva, con 7,3 kHz a Drive 100 %); el coste de CPU del módulo Color pasa de ~0,7 % (off) a ~1,1 % (2x) y ~1,8 % (4x) de un núcleo.
+
+**Versión 1.0**: la versión vive en un solo sitio, `project(VintageMaker VERSION 1.0.0)` en `CMakeLists.txt`, y de ahí salen: la versión del plugin que ve el host y las propiedades del archivo en Windows (Detalles), el "V1.0" de la ventana, el nombre y la versión del instalador y su entrada en "Aplicaciones instaladas". Para sacar una 1.0.1, 1.1, etc. basta cambiar esa línea.
+
+**Instalador** (`installer/VintageMaker.iss.in`, Inno Setup 6): lo genera CMake con la versión y lo compila el workflow de GitHub Actions (artefacto `VintageMaker-Installer-windows`, archivo `VintageMaker-1.0.0-Setup.exe`). Instala el VST3 en `C:\Program Files\Common Files\VST3\Vintage Maker.vst3` (pide permisos de administrador, solo 64 bits, inglés/español), crea la carpeta de presets del usuario y no la borra al desinstalar, y deja el desinstalador en `C:\Program Files\Vintage Maker` (no dentro de la carpeta VST3, que escanean los DAW). Desinstala solo lo que instaló y no toca archivos de terceros. En local: `scripts\build-windows.bat` lo compila si Inno Setup 6 está instalado.
+
 ## Pruebas
+
+`OversamplingTests` (206 comprobaciones): respuesta de los filtros halfband (ganancia 0 dB en continua, plana hasta 0,38 fs con 0,1 dB, sin ganancia en ninguna frecuencia, imágenes de la etapa de interpolación por debajo de -88 dB), **reducción de aliasing medida por FFT** en las tres curvas, nivel igual en Off/2x/4x, transparencia exacta con Drive 0, cambio de factor en marcha sin saltos, independencia del tamaño de bloque (idéntico bit a bit), valores extremos de 22,05 a 192 kHz, silencio tras señal fuerte termina en ceros exactos (sin subnormales), cadena completa con cambios de oversampling, cero asignaciones y CPU.
+
+`PresetTests` (911 comprobaciones): datos de los presets de fábrica (nombres únicos y válidos como nombre de archivo, parámetros existentes y dentro de rango, sin duplicados, enteros en interruptores y selectores, sin Bypass, todos distintos) y la tabla de parámetros contra `ParameterIds.h`. La parte que usa JUCE (`PresetManager`, interfaz) se valida compilando y con pluginval en CI; no hay pruebas automáticas de archivos ni de ventanas.
 
 `ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
 
@@ -385,5 +408,8 @@ No hay pruebas automáticas de la interfaz (necesita pantalla); el código del e
 - [ ] Space en FL Studio: activar Sync y comprobar que el delay sigue el tempo del proyecto (y los cambios de tempo), Feedback y Decay al máximo (deben decaer), cambiar Type en reproducción sin clicks y mover Width con material estéreo.
 - [ ] Vintage Engine en FL Studio: con Flux a 0 el sonido debe ser idéntico al de antes; subir Flux/Depth y escuchar la deriva del wow, el flutter, el ruido y la saturación en los tres Character, sin saltos ni cambios bruscos de volumen; automatizar un parámetro destino (por ejemplo Drive) y comprobar que la automatización sigue mandando.
 - [ ] Magnitude en FL Studio: a 0 el sonido debe ser el original; moverla en reproducción no debe hacer clicks, y subirla debe aumentar de forma pareja todos los efectos. Los ajustes de cada módulo no deben cambiar al moverla.
+- [ ] Presets en FL Studio: elegir cada preset de fábrica desde la lista y con las flechas (deben sonar distintos y moverse los controles), guardar uno propio con SAVE, cerrarlo y volver a cargarlo, guardar/abrir el proyecto y comprobar que recuerda el nombre, probar LOAD con un archivo, sobrescribir y nombres repetidos. Los valores de los presets de fábrica los puse con criterio pero sin oírlos: ajústalos a tu gusto.
+- [ ] Oversampling en FL Studio: alternar Off/2x/4x con Drive alto en reproducción (sin clicks) y comparar el brillo en agudos.
+- [ ] Instalador: ejecutar `VintageMaker-1.0.0-Setup.exe` (descargado del artefacto de GitHub Actions), comprobar que FL Studio ve el plugin tras reescanear, que Windows muestra la versión 1.0.0 en Aplicaciones instaladas y en Propiedades > Detalles del `.vst3`, que reinstalar actualiza sin duplicar y que desinstalar conserva `%APPDATA%\Vintage Maker\Presets`.
 - [ ] Interfaz en FL Studio: abrir el editor, comprobar la maqueta (madera, placas, grupos), mover cada perilla, doble clic, Ctrl+arrastrar, clic derecho, LEDs, selectores, Sync/Bypass, medidores IN/OUT con audio, redimensionar la ventana y cerrar/abrir el editor varias veces.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.
