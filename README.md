@@ -323,6 +323,29 @@ Magnitude escala: Wow Depth, Flutter Depth, Vinyl Drop, Degrade, Vinyl Amount, D
 - El Vintage Engine se actualiza una vez por bloque del host (con 60 ms de suavizado). Con el motor apagado, la salida es idéntica bit a bit para cualquier tamaño de bloque; con el motor encendido, es muy parecida pero no idéntica.
 - Tras `reset()` con el motor encendido, los módulos arrancan desde sus últimos valores, así que la repetición es muy parecida, no idéntica.
 
+## Módulo 7 — Interfaz visual
+
+Editor propio (`Source/PluginEditor.*`, `Source/UI/`), sustituye al editor genérico provisional. Estética de máquina de cinta (estilo J37): marco de madera y placas de metal cepillado, ambos generados por código al abrir el editor (no hay imágenes que distribuir), texto grabado en crema y luces ámbar.
+
+**Distribución** (según la guía de diseño): cabecera con menú, título, LOAD, selector de preset y SAVE; rejilla 2x2 con 01 Texture, 02 Color, 03 Movement y 04 Space; 05 Vintage Engine a todo lo ancho; abajo, el grupo Master a la izquierda y los deslizadores IN / OUT con medidor y lectura de nivel a la derecha. Cada módulo tiene su LED de encendido y su Dry/Wet en la cabecera de la placa.
+
+**Controles**: todo son perillas (arco ámbar, bipolar para Tone) salvo IN / OUT, que son deslizadores horizontales. Los parámetros de tipo lista (Crackle, Color Type, Style, Reverb Type, Character) son selectores apilados y Sync / Bypass son interruptores con lámpara. Los parámetros relacionados van juntos dentro de marcos con nombre:
+
+| Módulo | Grupos |
+|---|---|
+| Texture | Wow (Depth, Rate) · Flutter (Depth, Rate) · Vinyl (Amount, Drop, Crackle) · Degrade (Amount) |
+| Color | Saturation (Drive, Type) · Tone · Magic Chorus (Amount) |
+| Movement | Granular (Grain, Feedback, Style) · Tremolo (Depth, Rate) |
+| Space | Delay (Amount, Time, Feedback, Sync) · Reverb (Amount, Decay, Type) · Stereo field (Width) |
+| Vintage Engine | Organic variation (Flux, Rate, Depth, Character) |
+| Master | Dry/Wet, Magnitude, Bypass |
+
+**Comportamiento**: doble clic = valor por defecto; Ctrl/Cmd + arrastrar = ajuste fino; clic derecho = menú del DAW para ese parámetro (si el host lo ofrece); automatización VST3 mediante los attachments de JUCE. La interfaz no toca el procesador: solo escribe parámetros por el APVTS y lee los medidores. La ventana se puede redimensionar (proporción fija 16:9).
+
+**Pendiente (Módulo 8)**: LOAD, SAVE, las flechas y el selector de preset se muestran como en la guía pero están desactivados; no hacen nada. El menú principal solo tiene "Reset all parameters" (real) y la entrada de presets desactivada.
+
+No hay pruebas automáticas de la interfaz (necesita pantalla); el código del editor se compila sin avisos y se valida a ojo en FL Studio (ver la lista de abajo).
+
 ## Pruebas
 
 `ColorTests` (91 comprobaciones): salida idéntica con todo apagado, **armónicos medidos por FFT**, **aliasing medido** con y sin ADAA, compensación de nivel, respuesta de Tone, **desviación de tono del chorus medida** a 5 frecuencias de muestreo, modos, Mix, Width y la perilla Magic Chorus, cambios de modo/tipo sin clicks, independencia del tamaño de bloque, valores extremos y NaN/Inf, mono, reinicio repetible, cero asignaciones y CPU.
@@ -358,4 +381,5 @@ Magnitude escala: Wow Depth, Flutter Depth, Vinyl Drop, Degrade, Vinyl Amount, D
 - [ ] Space en FL Studio: activar Sync y comprobar que el delay sigue el tempo del proyecto (y los cambios de tempo), Feedback y Decay al máximo (deben decaer), cambiar Type en reproducción sin clicks y mover Width con material estéreo.
 - [ ] Vintage Engine en FL Studio: con Flux a 0 el sonido debe ser idéntico al de antes; subir Flux/Depth y escuchar la deriva del wow, el flutter, el ruido y la saturación en los tres Character, sin saltos ni cambios bruscos de volumen; automatizar un parámetro destino (por ejemplo Drive) y comprobar que la automatización sigue mandando.
 - [ ] Magnitude en FL Studio: a 0 el sonido debe ser el original; moverla en reproducción no debe hacer clicks, y subirla debe aumentar de forma pareja todos los efectos. Los ajustes de cada módulo no deben cambiar al moverla.
+- [ ] Interfaz en FL Studio: abrir el editor, comprobar la maqueta (madera, placas, grupos), mover cada perilla, doble clic, Ctrl+arrastrar, clic derecho, LEDs, selectores, Sync/Bypass, medidores IN/OUT con audio, redimensionar la ventana y cerrar/abrir el editor varias veces.
 - [ ] pluginval (strictness 10): automatizado en CI, falta ver la primera ejecución en verde.

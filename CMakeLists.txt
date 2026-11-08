@@ -144,6 +144,24 @@ if(VM_BUILD_PLUGIN)
     target_sources(VintageMaker PRIVATE
         Source/PluginProcessor.h
         Source/PluginProcessor.cpp
+        Source/PluginEditor.h
+        Source/PluginEditor.cpp
+        Source/UI/Theme/Palette.h
+        Source/UI/Theme/Textures.h
+        Source/UI/Theme/Textures.cpp
+        Source/UI/Theme/VintageLookAndFeel.h
+        Source/UI/Theme/VintageLookAndFeel.cpp
+        Source/UI/Components/HostContextMenu.h
+        Source/UI/Components/ParamKnob.h
+        Source/UI/Components/ParamKnob.cpp
+        Source/UI/Components/ChoiceSelector.h
+        Source/UI/Components/ChoiceSelector.cpp
+        Source/UI/Components/ToggleControls.h
+        Source/UI/Components/ToggleControls.cpp
+        Source/UI/Components/LevelSlider.h
+        Source/UI/Components/LevelSlider.cpp
+        Source/UI/Modules/ModuleSection.h
+        Source/UI/Modules/ModuleSection.cpp
         Source/Plugin/ParameterManager.h
         Source/Plugin/ParameterManager.cpp)
 

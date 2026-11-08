@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 #include <array>
 
 VintageMakerAudioProcessor::VintageMakerAudioProcessor()
@@ -89,8 +90,7 @@ juce::AudioProcessorParameter* VintageMakerAudioProcessor::getBypassParameter() 
 
 juce::AudioProcessorEditor* VintageMakerAudioProcessor::createEditor()
 {
-    // Provisional: the definitive UI is Module 7.
-    return new juce::GenericAudioProcessorEditor (*this);
+    return new VintageMakerEditor (*this);
 }
 
 void VintageMakerAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
