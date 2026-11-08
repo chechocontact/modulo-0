@@ -13,9 +13,13 @@ Cadena: `INPUT → TEXTURE → COLOR → MOVEMENT → SPACE → OUTPUT`
 | 0 — Core y fundamentos | **Validado** (Windows + FL Studio) |
 | 1 — Texture | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
 | 2 — Color | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
-| 3 — Movement | Pendiente |
-| 4 — Space | Pendiente |
-| 5–9 | Pendiente |
+| 3 — Movement | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
+| 4 — Space | **Implementado y probado en Linux.** Falta validar en Windows y FL Studio |
+| 5 — Vintage Engine | **Implementado y probado en Linux** |
+| 6 — Integración (Magnitude, medidores) | **Implementado y probado en Linux** |
+| 7 — Interfaz visual | **Implementada y compilada.** Falta verla en FL Studio |
+| 8 — Presets y estado | Pendiente (la barra de presets de la interfaz está desactivada) |
+| 9 — Optimización y distribución | Pendiente |
 
 ## Compilar en Windows 11 (Visual Studio 2022, x64)
 
