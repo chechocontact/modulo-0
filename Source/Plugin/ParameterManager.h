@@ -58,6 +58,7 @@ namespace vm
         std::atomic<float>* masterMix = nullptr;
         std::atomic<float>* masterBypass = nullptr;
         std::atomic<float>* vinylAmount = nullptr;
+        std::atomic<float>* crackleType = nullptr;
         std::atomic<float>* magnitude = nullptr;
         juce::AudioProcessorParameter* bypassParameter = nullptr;
 

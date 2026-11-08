@@ -179,6 +179,7 @@ El **ruido de vinilo** (hiss + crackle) **no está en la cadena**: lo genera el 
 | **Flutter Depth** | `texFlutterDepth` | Retardo variable de hasta ±0,6 ms |
 | **Flutter Rate** | `texFlutterRate` | 4–15 Hz |
 | **Vinyl Amount** | `texVinylAmount` | Nivel del hiss rosa y del crackle (ruido global, fuera de la cadena) |
+| **Crackle Type** | `texCrackleType` | Carácter del vinilo (selector): **Normal** (vinilo limpio, ~7 ticks/s suaves), **Dusty** (polvoriento: ~24 ticks/s finos y algo más de hiss), **Heavy** (muy desgastado: ~12 ticks/s mucho más grandes y largos, con hiss más alto). Se aplica al mismo ruido de vinilo, fuera de la cadena |
 | **Vinyl Drop** | `texVinylDrop` | Bajada ocasional de tono y nivel (cada ~30 s con 0 % hasta ~5 s con 100 %) |
 | **Degrade** | `texDegradeAmount` | **Una sola perilla**: Amount, Bandwidth y Smoothing juntos. Sube el suavizado de transitorios y la saturación, y estrecha el ancho de banda (de 40 Hz–12 kHz a unos 130 Hz–2,4 kHz) |
 
@@ -190,7 +191,9 @@ Más el **encendido** del slot (`texEnable`) y su **Dry/Wet** (`texMix`).
 - Valores fijos internos: Wow Shape 0 (seno + deriva), Flutter Variation 30 %.
 - El ruido tiene semillas fijas: dos renders iguales dan el mismo resultado.
 - **Valores por defecto:** Wow 25 %, Flutter 15 %, Vinyl Amount 20 %, Degrade 25 %. El plugin **no es transparente** con los valores por defecto.
-- Los parámetros eliminados (Shape, Variation, Crackle Type, Degrade Bandwidth/Smoothing) se ignoran al cargar estados antiguos.
+- **Crackle Type** actúa sobre el generador de ruido del Master, igual que Vinyl Amount: ningún módulo, ni el Dry/Wet maestro, ni las ganancias, ni Magnitude, ni el Vintage Engine lo modifican (Magnitude escala la cantidad, no el tipo). Cambiar de tipo en reproducción hace un deslizamiento de 50 ms, sin saltos. Valor por defecto: Normal, idéntico al vinilo anterior.
+- Tamaño relativo de los tipos (medido, a Vinyl Amount 100 %): RMS Normal −50,5 dBFS, Dusty −48,5 dBFS, Heavy −44,0 dBFS; pico −19, −26 y −12 dBFS.
+- Los parámetros eliminados (Shape, Variation, Degrade Bandwidth/Smoothing) se ignoran al cargar estados antiguos.
 
 ## Módulo 2 — Color
 
@@ -334,7 +337,7 @@ Magnitude escala: Wow Depth, Flutter Depth, Vinyl Drop, Degrade, Vinyl Amount, D
 
 `MovementTests` (70 comprobaciones): transparencia con Grain y Tremolo a 0, Grain creciente en los tres estilos, nivel normalizado, estilos distintos y Cloud ancho, Frozen sostiene el sonido tras cortar la entrada (Cloud no), Feedback alarga la cola y se mantiene acotado con entrada fuerte y 20 s, Tremolo (profundidad, velocidad y fase estéreo medidas), cambios de parámetros sin clicks, resultados idénticos con cualquier tamaño de bloque (1 a 512), frecuencias de 22,05 a 192 kHz, valores extremos y NaN/Inf, mono, silencio, reinicio repetible, límite de voces, cero asignaciones y CPU (unos 330x tiempo real).
 
-`CoreTests` (264 comprobaciones) cubre, además, el ruido de vinilo (nivel, estéreo, independencia de la cadena, bloques, asignaciones):
+`CoreTests` (298 comprobaciones) cubre, además, el ruido de vinilo (nivel, estéreo, independencia de la cadena, bloques, asignaciones) y los tres Crackle Type (densidad de ticks, tamaño de los pops, cambio de tipo en marcha, tipo inválido ignorado, independencia de la cadena):
 
 - Silencio, transparencia bit a bit con los valores por defecto (mono y estéreo) y ganancias.
 - Orden de la cadena.

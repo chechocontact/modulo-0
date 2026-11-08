@@ -70,6 +70,16 @@ static int checks = 0;
         }                                                                        \
     } while (false)
 
+#define CHECK_RANGE(value, low, high)                                            \
+    do {                                                                         \
+        ++checks;                                                                \
+        const double v_ = (value);                                               \
+        if (! (v_ >= (low) && v_ <= (high))) {                                   \
+            ++failures;                                                          \
+            std::printf ("  FAIL line %d  %s = %.6g, expected [%g, %g]\n",       \
+                         __LINE__, #value, v_, (double) (low), (double) (high)); \
+        }                                                                        \
+    } while (0)
 #define CHECK_NEAR(a, b, tol)                                                    \
     do {                                                                         \
         ++checks;                                                                \
@@ -715,6 +725,153 @@ namespace
         CHECK (exact);
     }
 
+    struct VinylStats
+    {
+        double ticksPerSecond = 0.0, rmsDb = 0.0, peakDb = 0.0;
+    };
+
+    VinylStats measureVinyl (CrackleType type, double seconds)
+    {
+        VinylNoise vinyl;
+        vinyl.prepare ({ 48000.0, 512, 2 });
+        vinyl.setAmount (1.0f);
+        vinyl.setCrackleType (type);
+        vinyl.reset();
+
+        const int n = (int) (seconds * 48000.0);
+        double sum = 0.0, peak = 0.0;
+        for (int i = 0; i < n; ++i)
+        {
+            vinyl.advance();
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                const double x = vinyl.next (ch);
+                if (ch == 0)
+                {
+                    sum += x * x;
+                    peak = std::max (peak, std::abs (x));
+                }
+            }
+        }
+
+        VinylStats s;
+        s.ticksPerSecond = (double) vinyl.getTicksStarted() / 2.0 / seconds; // two channels
+        s.rmsDb = 10.0 * std::log10 (std::max (1.0e-24, sum / n));
+        s.peakDb = 20.0 * std::log10 (std::max (1.0e-12, peak));
+        return s;
+    }
+
+    void testVinylCrackleTypes()
+    {
+        const auto normal = measureVinyl (CrackleType::normal, 60.0);
+        const auto dusty = measureVinyl (CrackleType::dusty, 60.0);
+        const auto heavy = measureVinyl (CrackleType::heavy, 60.0);
+
+        std::printf ("  normal: %.1f ticks/s, %.1f dBFS rms, peak %.1f dBFS\n", normal.ticksPerSecond, normal.rmsDb, normal.peakDb);
+        std::printf ("  dusty:  %.1f ticks/s, %.1f dBFS rms, peak %.1f dBFS\n", dusty.ticksPerSecond, dusty.rmsDb, dusty.peakDb);
+        std::printf ("  heavy:  %.1f ticks/s, %.1f dBFS rms, peak %.1f dBFS\n", heavy.ticksPerSecond, heavy.rmsDb, heavy.peakDb);
+
+        // Normal is the original vinyl, unchanged: about 7 ticks a second.
+        CHECK_RANGE (normal.ticksPerSecond, 7.0 * 0.85, 7.0 * 1.15);
+        // Dusty: many small ticks.
+        CHECK_RANGE (dusty.ticksPerSecond, 24.0 * 0.85, 24.0 * 1.15);
+        // Heavy: more than Normal, with far bigger pops.
+        CHECK_RANGE (heavy.ticksPerSecond, 12.0 * 0.85, 12.0 * 1.15);
+        CHECK (dusty.ticksPerSecond > heavy.ticksPerSecond && heavy.ticksPerSecond > normal.ticksPerSecond);
+
+        CHECK (heavy.peakDb > normal.peakDb + 3.0);   // bigger pops
+        CHECK (dusty.peakDb < normal.peakDb - 3.0);   // finer ticks
+        CHECK (heavy.rmsDb > normal.rmsDb + 3.0);     // the worn record is louder overall
+        CHECK (dusty.rmsDb > normal.rmsDb - 1.0 && dusty.rmsDb < heavy.rmsDb);
+
+        // Switching while running: the new type takes over without silence, steps or NaN,
+        // and an invalid type is ignored.
+        VinylNoise v;
+        v.prepare ({ 48000.0, 512, 2 });
+        v.setAmount (1.0f);
+        v.setCrackleType (CrackleType::normal);
+        v.reset();
+
+        const auto run = [&v] (double seconds)
+        {
+            const int n = (int) (seconds * 48000.0);
+            const auto before = v.getTicksStarted();
+            bool finite = true;
+            double peak = 0.0;
+            for (int i = 0; i < n; ++i)
+            {
+                v.advance();
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    const float x = v.next (ch);
+                    finite = finite && std::isfinite (x);
+                    peak = std::max (peak, (double) std::abs (x));
+                }
+            }
+            CHECK (finite);
+            CHECK (peak < 1.0); // never anywhere near full scale
+            return (double) (v.getTicksStarted() - before) / 2.0 / seconds;
+        };
+
+        const double a = run (30.0);
+        v.setCrackleType (CrackleType::heavy);
+        run (0.2); // glide
+        const double b = run (30.0);
+        v.setCrackleType ((CrackleType) 9);
+        const double c = run (30.0);       // invalid: still heavy
+        v.setCrackleType (CrackleType::dusty);
+        run (0.2);
+        const double d = run (30.0);
+        CHECK_RANGE (a, 7.0 * 0.8, 7.0 * 1.2);
+        CHECK_RANGE (b, 12.0 * 0.8, 12.0 * 1.2);
+        CHECK_RANGE (c, 12.0 * 0.8, 12.0 * 1.2);
+        CHECK_RANGE (d, 24.0 * 0.8, 24.0 * 1.2);
+
+        // Amount scales every type and 0 is silence for every type.
+        for (auto type : { CrackleType::normal, CrackleType::dusty, CrackleType::heavy })
+        {
+            MasterParameters p;
+            p.vinylAmount = 0.0f;
+            p.crackleType = type;
+            Rig off;
+            Buffer silent (2, 48000);
+            off.params = p;
+            off.master.reset();
+            off.run (silent, 512);
+            bool quiet = true;
+            for (float s : silent.data[0]) quiet = quiet && s == 0.0f;
+            CHECK (quiet);
+
+            p.vinylAmount = 1.0f;
+            Rig full, half;
+            Buffer bf (2, 6 * 48000), bh (2, 6 * 48000);
+            const double fullDb = vinylRmsDb (p, full, bf);
+            p.vinylAmount = 0.5f;
+            CHECK (vinylRmsDb (p, half, bh) < fullDb - 3.0);
+        }
+
+        // Whatever the type, the noise is untouched by the chain, the mix and the gains.
+        for (auto type : { CrackleType::dusty, CrackleType::heavy })
+        {
+            MasterParameters ref;
+            ref.vinylAmount = 0.8f;
+            ref.crackleType = type;
+            Rig clean;
+            Buffer bc (2, 6 * 48000);
+            const double baseline = vinylRmsDb (ref, clean, bc);
+
+            Rig hostileRig;
+            for (auto s : allSlots)
+                hostileRig.test (s).setParameters ({ -60.0f, false });
+            MasterParameters hostile = ref;
+            hostile.inputGainDb = -24.0f; hostile.outputGainDb = -24.0f; hostile.mix = 0.0f;
+            Buffer bh2 (2, 6 * 48000);
+            const double hostileDb = vinylRmsDb (hostile, hostileRig, bh2);
+            CHECK (std::abs (hostileDb - baseline) < 0.01);
+            CHECK (bc.data == bh2.data);
+        }
+    }
+
     void testVinylBlockSizeAndAllocation()
     {
         MasterParameters p;
@@ -802,6 +959,7 @@ int main()
         { "No allocation in process()", testNoAllocationInProcess },
         { "Vinyl noise: level, stereo, crackle", testVinylNoiseLevelAndStereo },
         { "Vinyl noise: independent of the chain", testVinylIsIndependentOfTheChain },
+        { "Vinyl noise: Crackle Type", testVinylCrackleTypes },
         { "Vinyl noise: block size + allocation", testVinylBlockSizeAndAllocation },
         { "Performance",               testPerformance },
     };

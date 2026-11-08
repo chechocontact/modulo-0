@@ -15,6 +15,7 @@ namespace vm
         float mix = 1.0f;           // 0 .. 1 (dry = original input, before input gain)
         float vinylAmount = 0.0f;   // 0 .. 1: vinyl noise added at the very end
         bool bypass = false;
+        CrackleType crackleType = CrackleType::normal;   // character of the vinyl noise
 
         bool operator== (const MasterParameters&) const = default;
     };

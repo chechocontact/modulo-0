@@ -738,7 +738,20 @@ namespace
         const double elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
         std::printf ("  perf: all five modules, %d s of stereo 48 kHz in %.3f s (%.0fx real time, %.2f %% of one core)\n",
                      seconds, elapsed, seconds / elapsed, 100.0 * elapsed / seconds);
-        CHECK (elapsed < seconds * 0.25);
+        // Sanitiser builds run several times slower by design, so the CPU limit only applies without them.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
+        constexpr bool sanitised = true;
+#elif defined(__has_feature)
+ #if __has_feature(address_sanitizer) || __has_feature(undefined_behavior_sanitizer)
+        constexpr bool sanitised = true;
+ #else
+        constexpr bool sanitised = false;
+ #endif
+#else
+        constexpr bool sanitised = false;
+#endif
+        if (! sanitised)
+            CHECK (elapsed < seconds * 0.25);
     }
 
     struct TestCase { const char* name; void (*fn)(); };

@@ -56,9 +56,11 @@ namespace vm
         parameters.mix = sanitise (p.mix, parameters.mix, 0.0f, 1.0f);
         parameters.vinylAmount = sanitise (p.vinylAmount, parameters.vinylAmount, 0.0f, 1.0f);
         parameters.bypass = p.bypass;
+        parameters.crackleType = (int) p.crackleType >= 0 && (int) p.crackleType <= 2 ? p.crackleType : parameters.crackleType;
 
         engine.setInputGainDb (parameters.inputGainDb);
         vinyl.setAmount (parameters.vinylAmount);
+        vinyl.setCrackleType (parameters.crackleType);
         outputGain.setTarget (decibelsToGain (parameters.outputGainDb));
         mix.setTarget (parameters.mix);
         active.setTarget (parameters.bypass ? 0.0f : 1.0f);

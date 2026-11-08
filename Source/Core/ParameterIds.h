@@ -40,6 +40,7 @@ namespace vm::param
     inline constexpr const char* texWowRate        = "texWowRate";        // Hz
     inline constexpr const char* texFlutterDepth   = "texFlutterDepth";   // percent
     inline constexpr const char* texFlutterRate    = "texFlutterRate";    // Hz
+    inline constexpr const char* crackleType       = "texCrackleType";     // choice: Normal/Dusty/Heavy (vinyl noise, outside the chain)
     inline constexpr const char* texVinylDrop      = "texVinylDrop";      // percent
     inline constexpr const char* texDegradeAmount  = "texDegradeAmount";  // percent (one-knob Degrade)
 

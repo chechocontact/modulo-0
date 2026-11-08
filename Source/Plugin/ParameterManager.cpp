@@ -66,6 +66,9 @@ namespace vm
             addHz (layout, param::texFlutterRate, "Flutter Rate", texture::flutterRateMinHz, texture::flutterRateMaxHz, d.flutterRate);
 
             addPercent (layout, param::vinylAmount, "Vinyl Amount", 20.0f);
+            layout.addChild (std::make_unique<juce::AudioParameterChoice> (
+                makeId (param::crackleType), "Crackle Type",
+                juce::StringArray { "Normal", "Dusty", "Heavy" }, (int) CrackleType::normal));
             addPercent (layout, param::texVinylDrop, "Vinyl Drop", d.vinylDrop * 100.0f);
             addPercent (layout, param::texDegradeAmount, "Degrade", d.degrade * 100.0f);
         }
@@ -212,6 +215,7 @@ namespace vm
         masterMix = requireParameter (state, param::masterMix);
         masterBypass = requireParameter (state, param::masterBypass);
         vinylAmount = requireParameter (state, param::vinylAmount);
+        crackleType = requireParameter (state, param::crackleType);
         magnitude = requireParameter (state, param::magnitude);
         bypassParameter = state.getParameter (param::masterBypass);
 
@@ -265,6 +269,7 @@ namespace vm
         p.mix = masterMix->load (std::memory_order_relaxed) / param::mixMaxPercent;
         p.vinylAmount = vinylAmount->load (std::memory_order_relaxed) / 100.0f;
         p.bypass = masterBypass->load (std::memory_order_relaxed) >= 0.5f;
+        p.crackleType = (CrackleType) juce::jlimit (0, 2, juce::roundToInt (crackleType->load (std::memory_order_relaxed)));
         return p;
     }
 
